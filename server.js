@@ -4,6 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 
 import authRoute from "./src/routes/authRoute.js";
+import setupSwagger from "./src/config/swagger.js";
 
 dotenv.config();
 
@@ -14,6 +15,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
+
+// Setup Swagger
+setupSwagger(app);
 
 // Home Route
 app.get("/", (req, res) => {
