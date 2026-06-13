@@ -50,7 +50,7 @@ const login = async (email, password) => {
 };
 
 const register = async (userData) => {
-  const { fullName, phone, email, password, branchId } = userData;
+  const { fullName, phone, email, password } = userData;
 
   const pool = await poolPromise;
 
@@ -71,7 +71,7 @@ const register = async (userData) => {
     .input("FullName", fullName)
     .input("Phone", phone)
     .input("Email", email)
-    .input("BranchID", branchId)
+    .input("BranchID", null)
     .input("PasswordHash", passwordHash)
     .input("Role", "Customer").query(`
       INSERT INTO Users
@@ -101,8 +101,9 @@ const register = async (userData) => {
 
   return {
     userId: result.recordset[0].UserID,
-    email,
     fullName,
+    email,
+    role: "Customer",
   };
 };
 
