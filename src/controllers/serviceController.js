@@ -1,9 +1,6 @@
 import serviceService from "../services/serviceService.js";
 
-/**
- * GET /api/services
- * Mọi người đều xem được danh sách dịch vụ (public cho khách hàng chọn)
- */
+
 const getAllServices = async (req, res) => {
   try {
     const filters = {};
@@ -22,9 +19,7 @@ const getAllServices = async (req, res) => {
   }
 };
 
-/**
- * GET /api/services/:id
- */
+
 const getServiceById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -43,9 +38,6 @@ const getServiceById = async (req, res) => {
   }
 };
 
-/**
- * POST /api/services (Admin only)
- */
 const createService = async (req, res) => {
   try {
     const service = await serviceService.createService(req.body);
@@ -59,9 +51,7 @@ const createService = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/services/:id (Admin only)
- */
+
 const updateService = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -85,9 +75,7 @@ const updateService = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/services/:id (Admin only) — Soft Delete
- */
+
 const deleteService = async (req, res) => {
   try {
     const id = parseInt(req.params.id);

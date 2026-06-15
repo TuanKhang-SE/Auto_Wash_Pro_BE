@@ -1,13 +1,7 @@
 import branchServiceService from "../services/branchServiceService.js";
 
-// ==========================================
-// API PUBLIC (Dành cho khách hàng)
-// ==========================================
 
-/**
- * GET /api/branches/:branchId/services
- * Công khai: Trả về danh sách dịch vụ của 1 chi nhánh kèm ActualPrice
- */
+
 const getPublicServicesByBranch = async (req, res) => {
   try {
     const branchId = parseInt(req.params.branchId);
@@ -22,19 +16,13 @@ const getPublicServicesByBranch = async (req, res) => {
   }
 };
 
-// ==========================================
-// API PRIVATE (Dành cho Admin/Manager)
-// ==========================================
 
-/**
- * GET /api/branch-services?BranchID=...
- */
 const getAll = async (req, res) => {
   try {
     let branchId = parseInt(req.query.BranchID);
     const { role, branchId: userBranchId } = req.user;
 
-    // Manager bắt buộc xem của chi nhánh mình
+
     if (role === "Manager") {
       branchId = userBranchId;
     }
@@ -53,9 +41,7 @@ const getAll = async (req, res) => {
   }
 };
 
-/**
- * GET /api/branch-services/:id
- */
+
 const getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -64,7 +50,7 @@ const getById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy" });
     }
 
-    // Manager chỉ được xem nếu thuộc chi nhánh của mình
+
     if (req.user.role === "Manager" && record.BranchID !== req.user.branchId) {
       return res.status(403).json({ success: false, message: "Không có quyền xem chi nhánh này" });
     }
@@ -75,14 +61,12 @@ const getById = async (req, res) => {
   }
 };
 
-/**
- * POST /api/branch-services
- */
+
 const create = async (req, res) => {
   try {
     const { BranchID } = req.body;
-    
-    // Manager chỉ được gán cho chi nhánh của mình
+
+
     if (req.user.role === "Manager" && BranchID !== req.user.branchId) {
       return res.status(403).json({ success: false, message: "Chỉ được gán dịch vụ cho chi nhánh của mình" });
     }
@@ -97,22 +81,20 @@ const create = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/branch-services/:id
- */
+
 const update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const existing = await branchServiceService.getById(id);
-    
+
     if (!existing) return res.status(404).json({ success: false, message: "Không tìm thấy" });
 
-    // Manager phân quyền
+
     if (req.user.role === "Manager" && existing.BranchID !== req.user.branchId) {
       return res.status(403).json({ success: false, message: "Không có quyền" });
     }
 
-    // Không cho đổi BranchID hoặc ServiceID ở PUT
+
     delete req.body.BranchID;
     delete req.body.ServiceID;
 
@@ -123,17 +105,14 @@ const update = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/branch-services/:id
- */
+
 const deleteSoft = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const existing = await branchServiceService.getById(id);
-    
+
     if (!existing) return res.status(404).json({ success: false, message: "Không tìm thấy" });
 
-    // Manager phân quyền
     if (req.user.role === "Manager" && existing.BranchID !== req.user.branchId) {
       return res.status(403).json({ success: false, message: "Không có quyền" });
     }

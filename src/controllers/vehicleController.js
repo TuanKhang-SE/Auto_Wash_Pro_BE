@@ -1,25 +1,23 @@
 import vehicleService from "../services/vehicleService.js";
 
-/**
- * GET /api/vehicles
- */
+
 const getAllVehicles = async (req, res) => {
   try {
     const filters = {};
     const { role, userId } = req.user;
 
-    // Chỉ lấy xe đang Active mặc định
+
     if (req.query.Status) {
       filters.Status = req.query.Status;
     } else if (role !== "Admin") {
-      filters.Status = "Active"; // Admin có thể xem Inactive, Customer chỉ xem Active
+      filters.Status = "Active";
     }
 
     if (role === "Customer") {
-      // Customer: Ép lấy CustomerID của chính họ
+
       filters.CustomerID = await vehicleService.getOrCreateCustomer(userId);
     } else if (role === "Admin" && req.query.CustomerID) {
-      // Admin: Hỗ trợ filter theo CustomerID nếu muốn
+
       filters.CustomerID = parseInt(req.query.CustomerID);
     }
 
@@ -30,9 +28,7 @@ const getAllVehicles = async (req, res) => {
   }
 };
 
-/**
- * GET /api/vehicles/:id
- */
+
 const getVehicleById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -56,19 +52,17 @@ const getVehicleById = async (req, res) => {
   }
 };
 
-/**
- * POST /api/vehicles
- */
+
 const createVehicle = async (req, res) => {
   try {
     const data = req.body;
     const { role, userId } = req.user;
 
     if (role === "Customer") {
-      // Ép CustomerID của chính người dùng
+
       data.CustomerID = await vehicleService.getOrCreateCustomer(userId);
     } else {
-      // Admin tạo xe cho khách -> phải truyền CustomerID
+
       if (!data.CustomerID) {
         return res.status(400).json({ success: false, message: "Yêu cầu CustomerID" });
       }
@@ -84,9 +78,7 @@ const createVehicle = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/vehicles/:id
- */
+
 const updateVehicle = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -102,7 +94,7 @@ const updateVehicle = async (req, res) => {
       if (existing.CustomerID !== customerId || existing.Status === "Inactive") {
         return res.status(403).json({ success: false, message: "Bạn không có quyền sửa xe này" });
       }
-      // Không cho phép Customer đổi CustomerID hoặc Status
+
       delete req.body.CustomerID;
       delete req.body.Status;
     }
@@ -117,9 +109,7 @@ const updateVehicle = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/vehicles/:id
- */
+
 const deleteVehicle = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
