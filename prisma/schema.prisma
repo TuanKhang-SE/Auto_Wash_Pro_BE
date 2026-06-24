@@ -54,7 +54,7 @@ model branch_configs {
   ConfigID          Int      @id(map: "PK__branch_c__C3BC333CAC2780E5") @default(autoincrement())
   BranchID          Int
   SlotDuration      Int?
-  CapacityPerStaff  Int?
+  TotalWashBays     Int?
   BufferMinutes     Int?
   MaxCarsPerBooking Int?
   CancelWindowHours Int?

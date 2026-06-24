@@ -50,6 +50,34 @@ app.use("/api/branch-services", branchServiceRoute);
 import vehicleRoute from "./src/routes/vehicleRoute.js";
 app.use("/api/vehicles", vehicleRoute);
 
+// Shift Routes
+import shiftRoute from "./src/routes/shiftRoute.js";
+app.use("/api/shifts", shiftRoute);
+
+// Customer Routes
+import customerRoute from "./src/routes/customerRoute.js";
+app.use("/api/customers", customerRoute);
+
+// Staff Schedule Routes
+import staffScheduleRoute from "./src/routes/staffScheduleRoute.js";
+app.use("/api/staff-schedules", staffScheduleRoute);
+
+// Branch Config Routes
+import branchConfigRoute from "./src/routes/branchConfigRoute.js";
+app.use("/api/branch-configs", branchConfigRoute);
+
+// Booking Routes
+import bookingRoute from "./src/routes/bookingRoute.js";
+app.use("/api/bookings", bookingRoute);
+
+// Staff Operations Routes
+import staffOperationRoute from "./src/routes/staffOperationRoute.js";
+app.use("/api/staff-operations", staffOperationRoute);
+
+// Transaction Routes
+import transactionRoute from "./src/routes/transactionRoute.js";
+app.use("/api/transactions", transactionRoute);
+
 // Start Server
 app.listen(PORT, () => {
   console.log(` Server running at http://localhost:${PORT}`);

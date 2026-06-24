@@ -3,34 +3,29 @@ import { z } from "zod/v4";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import roleMiddleware from "../middlewares/roleMiddleware.js";
 import validate from "../middlewares/validateMiddleware.js";
-import vehicleController from "../controllers/vehicleController.js";
+import shiftController from "../controllers/shiftController.js";
 
 const router = express.Router();
 
-
 const createSchema = z.object({
-  LicensePlate: z.string().min(1, "Biển số xe không được để trống"),
-  VehicleType: z.string().optional(),
-  Brand: z.string().optional(),
-  Model: z.string().optional(),
-  Color: z.string().optional(),
-  CustomerID: z.number().int().positive().optional(), 
+  ShiftName: z.string().min(1, "Tên ca không được để trống"),
+  StartTime: z.string().datetime().optional(), // ISO string like 2024-01-01T08:00:00.000Z
+  EndTime: z.string().datetime().optional(),
 });
 
 const updateSchema = z.object({
-  LicensePlate: z.string().min(1).optional(),
-  VehicleType: z.string().optional(),
-  Brand: z.string().optional(),
-  Model: z.string().optional(),
-  Color: z.string().optional(),
+  ShiftName: z.string().min(1).optional(),
+  StartTime: z.string().datetime().optional(),
+  EndTime: z.string().datetime().optional(),
+  Status: z.enum(["Active", "Inactive"]).optional(),
 });
 
 /**
  * @openapi
- * /api/vehicles:
+ * /api/shifts:
  *   get:
- *     summary: Danh sách xe
- *     tags: ["Quản lý Xe"]
+ *     summary: Lấy danh sách ca làm việc
+ *     tags: ["Quản lý Ca làm việc"]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -40,11 +35,6 @@ const updateSchema = z.object({
  *           type: string
  *           enum: [Active, Inactive]
  *         description: Lọc theo trạng thái
- *       - in: query
- *         name: CustomerID
- *         schema:
- *           type: integer
- *         description: Lọc theo ID khách hàng (Chỉ Admin)
  *     responses:
  *       200:
  *         description: Thành công
@@ -52,16 +42,16 @@ const updateSchema = z.object({
 router.get(
   "/",
   authMiddleware,
-  roleMiddleware(["Admin", "Customer"]),
-  vehicleController.getAllVehicles
+  roleMiddleware(["Admin", "Manager", "Staff"]),
+  shiftController.getAllShifts,
 );
 
 /**
  * @openapi
- * /api/vehicles/{id}:
+ * /api/shifts/{id}:
  *   get:
- *     summary: Chi tiết 1 xe
- *     tags: ["Quản lý Xe"]
+ *     summary: Xem chi tiết 1 ca làm việc
+ *     tags: ["Quản lý Ca làm việc"]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -77,16 +67,16 @@ router.get(
 router.get(
   "/:id",
   authMiddleware,
-  roleMiddleware(["Admin", "Customer"]),
-  vehicleController.getVehicleById
+  roleMiddleware(["Admin", "Manager", "Staff"]),
+  shiftController.getShiftById,
 );
 
 /**
  * @openapi
- * /api/vehicles:
+ * /api/shifts:
  *   post:
- *     summary: Thêm xe
- *     tags: ["Quản lý Xe"]
+ *     summary: Thêm ca làm việc mới
+ *     tags: ["Quản lý Ca làm việc"]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -96,27 +86,19 @@ router.get(
  *           schema:
  *             type: object
  *             required:
- *               - LicensePlate
+ *               - ShiftName
  *             properties:
- *               LicensePlate:
+ *               ShiftName:
  *                 type: string
- *                 example: 59F1-123.45
- *               VehicleType:
+ *                 example: Ca Sáng
+ *               StartTime:
  *                 type: string
- *                 example: Xe máy
- *               Brand:
+ *                 format: date-time
+ *                 example: "1970-01-01T08:00:00.000Z"
+ *               EndTime:
  *                 type: string
- *                 example: Honda
- *               Model:
- *                 type: string
- *                 example: Wave RSX
- *               Color:
- *                 type: string
- *                 example: Đỏ đen
- *               CustomerID:
- *                 type: integer
- *                 description: Bắt buộc đối với Admin, tự động nhận dạng với Customer
- *                 example: 1
+ *                 format: date-time
+ *                 example: "1970-01-01T12:00:00.000Z"
  *     responses:
  *       201:
  *         description: Thành công
@@ -124,17 +106,17 @@ router.get(
 router.post(
   "/",
   authMiddleware,
-  roleMiddleware(["Admin", "Customer"]),
+  roleMiddleware(["Admin"]),
   validate(createSchema),
-  vehicleController.createVehicle
+  shiftController.createShift,
 );
 
 /**
  * @openapi
- * /api/vehicles/{id}:
+ * /api/shifts/{id}:
  *   put:
- *     summary: Cập nhật thông tin xe
- *     tags: ["Quản lý Xe"]
+ *     summary: Cập nhật ca làm việc
+ *     tags: ["Quản lý Ca làm việc"]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -150,17 +132,18 @@ router.post(
  *           schema:
  *             type: object
  *             properties:
- *               LicensePlate:
+ *               ShiftName:
  *                 type: string
- *                 example: 59F1-999.99
- *               VehicleType:
+ *                 example: Ca Sáng Sớm
+ *               StartTime:
  *                 type: string
- *               Brand:
+ *                 format: date-time
+ *               EndTime:
  *                 type: string
- *               Model:
+ *                 format: date-time
+ *               Status:
  *                 type: string
- *               Color:
- *                 type: string
+ *                 enum: [Active, Inactive]
  *     responses:
  *       200:
  *         description: Thành công
@@ -168,17 +151,17 @@ router.post(
 router.put(
   "/:id",
   authMiddleware,
-  roleMiddleware(["Admin", "Customer"]),
+  roleMiddleware(["Admin"]),
   validate(updateSchema),
-  vehicleController.updateVehicle
+  shiftController.updateShift,
 );
 
 /**
  * @openapi
- * /api/vehicles/{id}:
+ * /api/shifts/{id}:
  *   delete:
- *     summary: Xóa xe (Soft delete)
- *     tags: ["Quản lý Xe"]
+ *     summary: Xóa ca làm việc (Soft delete)
+ *     tags: ["Quản lý Ca làm việc"]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -194,8 +177,8 @@ router.put(
 router.delete(
   "/:id",
   authMiddleware,
-  roleMiddleware(["Admin", "Customer"]),
-  vehicleController.deleteVehicle
+  roleMiddleware(["Admin"]),
+  shiftController.deleteShift,
 );
 
 export default router;

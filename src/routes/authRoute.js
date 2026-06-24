@@ -89,6 +89,5 @@ router.post("/login", authController.login);
  *         description: Không có token hoặc token đã bị thu hồi/hết hạn
  */
 router.post("/logout", authMiddleware, authController.logout);
-router.post("/register", authController.register);
 
 export default router;
