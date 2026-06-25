@@ -1,4 +1,44 @@
 import authService from "../services/authService.js";
+import mailService from "../services/mailService.js";
+import otpService from "../services/otpService.js";
+
+const sendRegisterCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập email",
+      });
+    }
+
+    const emailExists = await authService.checkEmailExists(email);
+
+    if (emailExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Email đã tồn tại",
+      });
+    } 
+
+    const code = otpService.generateOtp();
+
+    otpService.saveOtp(email, code);
+
+    await mailService.sendRegisterCode(email, code);  
+
+    res.status(200).json({
+      success: true,
+      message: "Mã xác minh đã được gửi đến email",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Gửi mã xác minh thất bại",
+    });
+  }
+};
 
 const login = async (req, res) => {
   try {
@@ -28,6 +68,24 @@ const logout = (req, res) => {
 };
 const register = async (req, res) => {
   try {
+    const { email, code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập mã xác minh",
+      });
+    }
+
+    const otpResult = otpService.verifyOtp(email, code);
+
+    if (!otpResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: otpResult.message,
+      });
+    }
+
     const result = await authService.register(req.body);
 
     res.status(201).json({
@@ -42,8 +100,10 @@ const register = async (req, res) => {
     });
   }
 };
+
 export default {
   login,
   logout,
   register,
+  sendRegisterCode,
 };

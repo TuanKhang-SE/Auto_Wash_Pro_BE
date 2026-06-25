@@ -21,6 +21,7 @@
     "morgan": "^1.11.0",
     "mssql": "^12.5.5",
     "node-cron": "^4.2.1",
+    "nodemailer": "^9.0.1",
     "prisma": "5.22.0",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",

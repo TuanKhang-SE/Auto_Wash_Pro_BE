@@ -90,4 +90,6 @@ router.post("/login", authController.login);
  */
 router.post("/logout", authMiddleware, authController.logout);
 
+router.post("/send-register-code", authController.sendRegisterCode);
+
 export default router;

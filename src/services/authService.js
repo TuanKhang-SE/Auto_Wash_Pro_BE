@@ -49,6 +49,18 @@ const login = async (email, password) => {
   };
 };
 
+const checkEmailExists = async (email) => {
+  const pool = await poolPromise;
+
+  const existingUser = await pool.request().input("Email", email).query(`
+      SELECT UserID
+      FROM Users
+      WHERE Email = @Email
+    `);
+
+  return existingUser.recordset.length > 0;
+};
+
 const register = async (userData) => {
   const { fullName, phone, email, password } = userData;
 
@@ -118,6 +130,7 @@ const isTokenBlacklisted = (token) => {
 export default {
   login,
   register,
+  checkEmailExists,
   blacklistToken,
   isTokenBlacklisted,
 };
