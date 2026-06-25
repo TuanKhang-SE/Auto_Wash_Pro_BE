@@ -46,6 +46,10 @@ app.use("/api/services", serviceRoute);
 import branchServiceRoute from "./src/routes/branchServiceRoute.js";
 app.use("/api/branch-services", branchServiceRoute);
 
+// Dashboard Route
+import dashboardRoute from "./src/routes/dashboardRoute.js";
+app.use("/api/dashboard", dashboardRoute);
+
 // Promotion Routes
 import promotionRoute from "./src/routes/promotionRoute.js";
 app.use("/api/promotions", promotionRoute);
