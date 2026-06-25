@@ -2,19 +2,40 @@ import prisma from "../config/prisma.js";
 
 
 const getOrCreateCustomer = async (userId) => {
-
   let customer = await prisma.customers.findFirst({
     where: { UserID: userId },
   });
 
-
   if (!customer) {
-    customer = await prisma.customers.create({
-      data: {
-        UserID: userId,
-        TotalVisits: 0,
-        TotalSpent: 0,
-      },
+
+    const defaultTier = await prisma.tier_configs.findFirst({
+      orderBy: { MinSpent: "asc" },
+    });
+
+    if (!defaultTier) {
+      throw new Error("Hệ thống chưa được cấu hình hạng thành viên. Vui lòng liên hệ Admin.");
+    }
+
+
+    customer = await prisma.$transaction(async (tx) => {
+      const newCustomer = await tx.customers.create({
+        data: {
+          UserID: userId,
+          TotalVisits: 0,
+          TotalSpent: 0,
+        },
+      });
+
+      await tx.loyaltyAccounts.create({
+        data: {
+          CustomerID: newCustomer.CustomerID,
+          TierID: defaultTier.TierID,
+          CurrentPoints: 0,
+          LifetimePoints: 0,
+        },
+      });
+
+      return newCustomer;
     });
   }
 

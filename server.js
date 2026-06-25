@@ -86,6 +86,14 @@ app.use("/api/staff-operations", staffOperationRoute);
 import transactionRoute from "./src/routes/transactionRoute.js";
 app.use("/api/transactions", transactionRoute);
 
+// Tier Config Routes
+import tierConfigRoute from "./src/routes/tierConfigRoute.js";
+app.use("/api/tier-configs", tierConfigRoute);
+
+// Reward Routes
+import rewardRoute from "./src/routes/rewardRoute.js";
+app.use("/api/rewards", rewardRoute);
+
 // Start Server
 app.listen(PORT, () => {
   console.log(` Server running at http://localhost:${PORT}`);

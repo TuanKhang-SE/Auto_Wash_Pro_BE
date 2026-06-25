@@ -1,6 +1,66 @@
 import prisma from "../config/prisma.js";
 import vnpayConfig from "../config/vnpayConfig.js";
 
+const handleLoyaltyAfterPayment = async (tx, transaction) => {
+  const finalAmount = parseFloat(transaction.FinalAmount);
+  if (finalAmount <= 0) return;
+
+  const loyaltyAccount = await tx.loyaltyAccounts.findFirst({
+    where: { CustomerID: transaction.CustomerID },
+    include: { tier_configs: true }
+  });
+
+  if (!loyaltyAccount) return;
+
+  const pointRate = parseInt(process.env.POINT_CONVERSION_RATE) || 10000;
+  const multiplier = loyaltyAccount.tier_configs?.PointMultiplier ? parseFloat(loyaltyAccount.tier_configs.PointMultiplier) : 1;
+
+
+  const earnedPoints = Math.floor(finalAmount / pointRate) * multiplier;
+
+
+  const customer = await tx.customers.update({
+    where: { CustomerID: transaction.CustomerID },
+    data: {
+      TotalSpent: { increment: finalAmount },
+    }
+  });
+
+
+  let newTierId = loyaltyAccount.TierID;
+  const newTotalSpent = parseFloat(customer.TotalSpent);
+  const eligibleTiers = await tx.tier_configs.findMany({
+    where: { MinSpent: { lte: newTotalSpent } },
+    orderBy: { MinSpent: 'desc' }
+  });
+
+  if (eligibleTiers.length > 0) {
+    newTierId = eligibleTiers[0].TierID;
+  }
+
+
+  await tx.loyaltyAccounts.update({
+    where: { AccountID: loyaltyAccount.AccountID },
+    data: {
+      CurrentPoints: { increment: earnedPoints },
+      LifetimePoints: { increment: earnedPoints },
+      TierID: newTierId
+    }
+  });
+
+
+  if (earnedPoints > 0) {
+    await tx.pointTransactions.create({
+      data: {
+        AccountID: loyaltyAccount.AccountID,
+        TransactionID: transaction.TransactionID,
+        Type: "EARN",
+        Points: earnedPoints,
+      }
+    });
+  }
+};
+
 const createFromBooking = async (bookingId) => {
   const booking = await prisma.bookingGroups.findUnique({
     where: { BookingGroupID: bookingId },
@@ -35,18 +95,42 @@ const createFromBooking = async (bookingId) => {
     });
   });
 
-  const discountAmount = 0;
-  const finalAmount = subtotal - discountAmount;
 
-  const transaction = await prisma.transactions.create({
-    data: {
-      BookingGroupID: bookingId,
-      CustomerID: booking.CustomerID,
-      Subtotal: subtotal,
-      DiscountAmount: discountAmount,
-      FinalAmount: finalAmount,
-      Status: "Pending",
-    },
+  const loyaltyAccount = await prisma.loyaltyAccounts.findFirst({
+    where: { CustomerID: booking.CustomerID },
+    include: { tier_configs: true }
+  });
+
+  const tierDiscountPercent = loyaltyAccount?.tier_configs?.DiscountPercent ? parseFloat(loyaltyAccount.tier_configs.DiscountPercent) : 0;
+  const tierDiscountAmount = (subtotal * tierDiscountPercent) / 100;
+
+  const finalAmount = subtotal - tierDiscountAmount;
+
+  const transaction = await prisma.$transaction(async (tx) => {
+    const newTx = await tx.transactions.create({
+      data: {
+        BookingGroupID: bookingId,
+        CustomerID: booking.CustomerID,
+        Subtotal: subtotal,
+        DiscountAmount: tierDiscountAmount,
+        FinalAmount: finalAmount,
+        Status: "Pending",
+      },
+    });
+
+    if (tierDiscountAmount > 0) {
+      await tx.transactionDiscounts.create({
+        data: {
+          BookingGroupID: bookingId,
+          CustomerID: booking.CustomerID,
+          DiscountType: "TIER",
+          DiscountAmount: tierDiscountAmount,
+          DiscountName: `Giảm giá hạng ${loyaltyAccount.tier_configs.TierName}`
+        }
+      });
+    }
+
+    return newTx;
   });
 
   return transaction;
@@ -85,6 +169,8 @@ const payManual = async (transactionId, method, staffId) => {
         ConfirmedAt: new Date(),
       },
     });
+
+    await handleLoyaltyAfterPayment(tx, updatedTransaction);
 
     return updatedTransaction;
   });
@@ -144,7 +230,7 @@ const vnpayIPN = async (query) => {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.transactions.update({
+      const updatedTx = await tx.transactions.update({
         where: { TransactionID: transactionId },
         data: { Status: "Paid" },
       });
@@ -159,6 +245,8 @@ const vnpayIPN = async (query) => {
           ConfirmedAt: new Date(),
         },
       });
+
+      await handleLoyaltyAfterPayment(tx, updatedTx);
     });
 
     return { RspCode: "00", Message: "Confirm Success" };
@@ -194,61 +282,83 @@ const applyDiscount = async (transactionId, promotionId) => {
     throw new Error("Mã khuyến mãi đã hết hạn");
   }
 
-  // Nếu Khuyến mãi yêu cầu giới hạn Branch
+
   if (promotion.BranchID && transaction.BookingGroups?.BranchID !== promotion.BranchID) {
     throw new Error("Mã khuyến mãi không áp dụng cho chi nhánh này");
   }
 
-  // TÍNH TOÁN THEO LOGIC CELLPHONES (Tính giảm giá tuần tự nếu sau này có Hạng thành viên)
-  // Bước 1: Giả sử Subtotal là 500k. Ta lấy Subtotal làm Base để trừ khuyến mãi
-  let calculatedDiscount = 0;
+
+  let promoDiscount = 0;
   const baseAmount = parseFloat(transaction.Subtotal);
 
   if (promotion.DiscountType === "PERCENTAGE") {
-    calculatedDiscount = (baseAmount * parseFloat(promotion.DiscountValue)) / 100;
+    promoDiscount = (baseAmount * parseFloat(promotion.DiscountValue)) / 100;
   } else if (promotion.DiscountType === "FIXED_AMOUNT") {
-    calculatedDiscount = parseFloat(promotion.DiscountValue);
+    promoDiscount = parseFloat(promotion.DiscountValue);
   }
 
-  // Không cho phép giảm quá giá trị hóa đơn
-  if (calculatedDiscount > baseAmount) {
-    calculatedDiscount = baseAmount;
+
+  if (promoDiscount > baseAmount) {
+    promoDiscount = baseAmount;
   }
 
-  // Bước 2: Tương lai nếu có Hạng thành viên, ta sẽ trừ tiếp 5% của (baseAmount - calculatedDiscount).
-  // Hiện tại chưa có Loyalty -> FinalAmount = baseAmount - calculatedDiscount
-  const newFinalAmount = baseAmount - calculatedDiscount;
 
-  // Thực thi Transaction DB
+  const amountAfterPromo = baseAmount - promoDiscount;
+
+  const loyaltyAccount = await prisma.loyaltyAccounts.findFirst({
+    where: { CustomerID: transaction.CustomerID },
+    include: { tier_configs: true }
+  });
+
+  const tierDiscountPercent = loyaltyAccount?.tier_configs?.DiscountPercent ? parseFloat(loyaltyAccount.tier_configs.DiscountPercent) : 0;
+  const tierDiscountAmount = (amountAfterPromo * tierDiscountPercent) / 100;
+
+  const totalDiscount = promoDiscount + tierDiscountAmount;
+  const newFinalAmount = baseAmount - totalDiscount;
+
+
   const result = await prisma.$transaction(async (tx) => {
-    // Xóa khuyến mãi cũ nếu đã áp dụng (Mỗi hóa đơn chỉ xài 1 mã promotion)
+
     await tx.transactionDiscounts.deleteMany({
       where: {
         BookingGroupID: transaction.BookingGroupID,
-        DiscountType: 'PROMOTION'
+        DiscountType: { in: ['PROMOTION', 'TIER'] }
       }
     });
 
-    // Cập nhật lại Hóa đơn
+
     const updatedTx = await tx.transactions.update({
       where: { TransactionID: transactionId },
       data: {
-        DiscountAmount: calculatedDiscount,
+        DiscountAmount: totalDiscount,
         FinalAmount: newFinalAmount
       }
     });
 
-    // Ghi log vào TransactionDiscounts
+
     await tx.transactionDiscounts.create({
       data: {
         BookingGroupID: transaction.BookingGroupID,
         CustomerID: transaction.CustomerID,
         PromotionID: promotionId,
         DiscountType: 'PROMOTION',
-        DiscountAmount: calculatedDiscount,
+        DiscountAmount: promoDiscount,
         DiscountName: promotion.PromotionName
       }
     });
+
+
+    if (tierDiscountAmount > 0) {
+      await tx.transactionDiscounts.create({
+        data: {
+          BookingGroupID: transaction.BookingGroupID,
+          CustomerID: transaction.CustomerID,
+          DiscountType: "TIER",
+          DiscountAmount: tierDiscountAmount,
+          DiscountName: `Giảm giá hạng ${loyaltyAccount.tier_configs.TierName}`
+        }
+      });
+    }
 
     return updatedTx;
   });
