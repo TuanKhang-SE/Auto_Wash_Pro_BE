@@ -2,7 +2,7 @@ import prisma from "../config/prisma.js";
 
 const timeStrToDate = (timeStr) => {
   const [hours, minutes] = timeStr.split(":");
-  const date = new Date(1970, 0, 1, parseInt(hours), parseInt(minutes));
+  const date = new Date(Date.UTC(1970, 0, 1, parseInt(hours), parseInt(minutes)));
 
   return date;
 };

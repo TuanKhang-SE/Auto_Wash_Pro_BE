@@ -111,6 +111,22 @@ const applyDiscount = async (req, res) => {
   }
 };
 
+const applyReward = async (req, res) => {
+  try {
+    const transactionId = parseInt(req.params.id);
+    const { redemptionId } = req.body;
+
+    if (!redemptionId) {
+      return res.status(400).json({ error: "redemptionId là bắt buộc" });
+    }
+
+    const result = await transactionService.applyReward(transactionId, redemptionId);
+    res.json({ message: "Áp dụng điểm thưởng thành công", data: result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 export default {
   createFromBooking,
   payManual,
@@ -118,4 +134,5 @@ export default {
   vnpayReturn,
   vnpayIPN,
   applyDiscount,
+  applyReward,
 };

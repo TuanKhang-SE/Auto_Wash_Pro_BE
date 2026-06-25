@@ -85,7 +85,10 @@ const createFromBooking = async (bookingId) => {
   });
 
   if (existingTransaction) {
-    throw new Error("Giao dịch cho đơn đặt lịch này đã được tạo");
+    if (existingTransaction.Status === "Paid") {
+      throw new Error("Giao dịch này đã được thanh toán rồi");
+    }
+    return existingTransaction;
   }
 
   let subtotal = 0;
@@ -322,7 +325,7 @@ const applyDiscount = async (transactionId, promotionId) => {
     await tx.transactionDiscounts.deleteMany({
       where: {
         BookingGroupID: transaction.BookingGroupID,
-        DiscountType: { in: ['PROMOTION', 'TIER'] }
+        DiscountType: { in: ['PROMOTION', 'TIER', 'REWARD'] }
       }
     });
 
@@ -366,10 +369,107 @@ const applyDiscount = async (transactionId, promotionId) => {
   return result;
 };
 
+const applyReward = async (transactionId, redemptionId) => {
+  const transaction = await prisma.transactions.findUnique({
+    where: { TransactionID: transactionId },
+    include: { BookingGroups: true }
+  });
+
+  if (!transaction) throw new Error("Không tìm thấy hóa đơn");
+  if (transaction.Status !== "Pending") {
+    throw new Error("Chỉ có thể áp dụng ưu đãi cho hóa đơn chưa thanh toán");
+  }
+
+  const redemption = await prisma.rewardRedemptions.findUnique({
+    where: { RedemptionID: redemptionId },
+    include: { Rewards: true }
+  });
+
+  if (!redemption) throw new Error("Mã phần quà không tồn tại");
+  if (redemption.CustomerID !== transaction.CustomerID) {
+    throw new Error("Phần quà này không thuộc về khách hàng hiện tại");
+  }
+  if (redemption.Status !== "UNUSED") {
+    throw new Error("Phần quà này đã được sử dụng hoặc không hợp lệ");
+  }
+
+  let rewardDiscount = parseFloat(redemption.Rewards.DiscountValue || 0);
+  const baseAmount = parseFloat(transaction.Subtotal);
+
+  if (rewardDiscount > baseAmount) {
+    rewardDiscount = baseAmount;
+  }
+
+  const amountAfterReward = baseAmount - rewardDiscount;
+
+  const loyaltyAccount = await prisma.loyaltyAccounts.findFirst({
+    where: { CustomerID: transaction.CustomerID },
+    include: { tier_configs: true }
+  });
+
+  const tierDiscountPercent = loyaltyAccount?.tier_configs?.DiscountPercent ? parseFloat(loyaltyAccount.tier_configs.DiscountPercent) : 0;
+  const tierDiscountAmount = (amountAfterReward * tierDiscountPercent) / 100;
+
+  const totalDiscount = rewardDiscount + tierDiscountAmount;
+  const newFinalAmount = baseAmount - totalDiscount;
+
+  const result = await prisma.$transaction(async (tx) => {
+
+    await tx.transactionDiscounts.deleteMany({
+      where: {
+        BookingGroupID: transaction.BookingGroupID,
+        DiscountType: { in: ['PROMOTION', 'TIER', 'REWARD'] }
+      }
+    });
+
+    const updatedTx = await tx.transactions.update({
+      where: { TransactionID: transactionId },
+      data: {
+        DiscountAmount: totalDiscount,
+        FinalAmount: newFinalAmount
+      }
+    });
+
+    await tx.transactionDiscounts.create({
+      data: {
+        BookingGroupID: transaction.BookingGroupID,
+        CustomerID: transaction.CustomerID,
+        DiscountType: 'REWARD',
+        ReferenceID: redemptionId,
+        DiscountAmount: rewardDiscount,
+        DiscountName: redemption.Rewards.RewardName
+      }
+    });
+
+    if (tierDiscountAmount > 0) {
+      await tx.transactionDiscounts.create({
+        data: {
+          BookingGroupID: transaction.BookingGroupID,
+          CustomerID: transaction.CustomerID,
+          DiscountType: "TIER",
+          DiscountAmount: tierDiscountAmount,
+          DiscountName: `Giảm giá hạng ${loyaltyAccount.tier_configs.TierName}`
+        }
+      });
+    }
+
+
+    await tx.rewardRedemptions.update({
+      where: { RedemptionID: redemptionId },
+      data: { Status: "USED" }
+    });
+
+    return updatedTx;
+  });
+
+  return result;
+};
+
 export default {
   createFromBooking,
   payManual,
   createVNPayUrl,
   vnpayIPN,
   applyDiscount,
+  applyReward,
 };

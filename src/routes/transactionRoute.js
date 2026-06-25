@@ -172,6 +172,12 @@ router.post(
   transactionController.applyDiscount,
 );
 
+router.post(
+  "/:id/apply-reward",
+  authMiddleware,
+  transactionController.applyReward,
+);
+
 router.get("/vnpay-return", transactionController.vnpayReturn);
 router.get("/vnpay-ipn", transactionController.vnpayIPN);
 

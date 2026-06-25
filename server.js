@@ -94,6 +94,10 @@ app.use("/api/tier-configs", tierConfigRoute);
 import rewardRoute from "./src/routes/rewardRoute.js";
 app.use("/api/rewards", rewardRoute);
 
+// Invoice Routes
+import invoiceRoute from "./src/routes/invoiceRoute.js";
+app.use("/api/invoices", invoiceRoute);
+
 // Start Server
 app.listen(PORT, () => {
   console.log(` Server running at http://localhost:${PORT}`);

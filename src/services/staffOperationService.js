@@ -37,8 +37,7 @@ const getTodayBookings = async (branchId, customerName, status) => {
       },
       BookingItems: {
         include: {
-          Vehicles: { select: { LicensePlate: true, Make: true, Model: true } },
-          Users: { select: { FullName: true } }, // The ProcessedBy user
+          Vehicles: { select: { LicensePlate: true, Brand: true, Model: true } },
           ServiceLineItems: {
             include: { Services: { select: { ServiceName: true } } },
           },
@@ -65,10 +64,8 @@ const updateBookingItemStatus = async (bookingItemId, status, staffId) => {
     updateData.CheckInAt = new Date();
   } else if (status === "InProgress") {
     updateData.WashStartAt = new Date();
-    updateData.ProcessedBy = staffId;
   } else if (status === "Completed") {
     updateData.CompletedAt = new Date();
-    if (!item.ProcessedBy) updateData.ProcessedBy = staffId;
   }
 
   await prisma.$transaction(async (tx) => {
