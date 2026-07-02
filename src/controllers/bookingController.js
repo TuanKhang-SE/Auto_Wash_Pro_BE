@@ -80,7 +80,7 @@ const getMyBookings = async (req, res) => {
         BookingItems: {
           include: {
             Vehicles: {
-              select: { LicensePlate: true, Make: true, Model: true },
+              select: { LicensePlate: true, Brand: true, Model: true },
             },
             ServiceLineItems: {
               include: { Services: { select: { ServiceName: true } } },
