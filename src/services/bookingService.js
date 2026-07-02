@@ -62,7 +62,8 @@ const getAvailableSlots = async (branchId, bookingDateStr) => {
 
   for (const shiftId in staffPerShift) {
     const { shift, count } = staffPerShift[shiftId];
-    const capacity = Math.min(totalBays, count);
+
+    const capacity = totalBays;
 
     let current = new Date(shift.StartTime);
     const end = new Date(shift.EndTime);
