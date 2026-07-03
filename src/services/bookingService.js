@@ -74,6 +74,15 @@ const getAvailableSlots = async (branchId, bookingDateStr) => {
       const slotEnd = new Date(current.getTime() + slotDuration * 60000);
       if (slotEnd > end) break;
 
+      const slotDateTime = new Date(bookingDate);
+      const [hours, mins] = startStr.split(":");
+      slotDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
+
+      if (slotDateTime < new Date()) {
+        current = new Date(current.getTime() + (slotDuration + buffer) * 60000);
+        continue;
+      }
+
       const booked = bookedPerTime[startStr] || 0;
       const available = Math.max(0, capacity - booked);
 

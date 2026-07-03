@@ -172,6 +172,38 @@ router.post(
   transactionController.applyDiscount,
 );
 
+/**
+ * @openapi
+ * /api/transactions/{id}/apply-reward:
+ *   post:
+ *     summary: Áp dụng phần quà đổi từ điểm (Reward) vào hóa đơn
+ *     tags: ["Giao dịch & Thanh toán"]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID của Giao dịch (Transaction)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - redemptionId
+ *             properties:
+ *               redemptionId:
+ *                 type: integer
+ *           example:
+ *             redemptionId: 1
+ *     responses:
+ *       200:
+ *         description: Áp dụng phần quà thành công
+ */
 router.post(
   "/:id/apply-reward",
   authMiddleware,
