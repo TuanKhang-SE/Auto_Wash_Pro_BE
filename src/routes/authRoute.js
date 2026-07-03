@@ -92,4 +92,8 @@ router.post("/logout", authMiddleware, authController.logout);
 
 router.post("/send-register-code", authController.sendRegisterCode);
 
+router.post("/forgot-password/send-code", authController.sendForgotPasswordCode);
+
+router.post("/forgot-password/reset", authController.resetPassword);
+
 export default router;

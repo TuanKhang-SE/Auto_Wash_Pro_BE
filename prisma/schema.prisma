@@ -75,6 +75,8 @@ model branches {
   BranchServices BranchServices[]
   Promotions     Promotions[]
   Users          Users[]
+  Latitude  Float?
+Longitude Float?
 }
 
 model BranchServices {

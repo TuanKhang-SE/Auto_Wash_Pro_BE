@@ -61,6 +61,41 @@ const checkEmailExists = async (email) => {
   return existingUser.recordset.length > 0;
 };
 
+/*==========================QUEN MAT KHAU FORGOT PASSWORD================================*/
+
+const resetPassword = async (email, newPassword) => {
+  const pool = await poolPromise;
+
+  const existingUser = await pool.request().input("Email", email).query(`
+    SELECT UserID
+    FROM Users
+    WHERE Email = @Email
+  `);
+
+  if (existingUser.recordset.length === 0) {
+    throw new Error("Email không tồn tại");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await pool
+    .request()
+    .input("Email", email)
+    .input("PasswordHash", passwordHash)
+    .query(`
+      UPDATE Users
+      SET PasswordHash = @PasswordHash,
+          UpdatedAt = GETDATE()
+      WHERE Email = @Email
+    `);
+
+  return {
+    email,
+  };
+};
+
+/*========================================================================*/
+
 const register = async (userData) => {
   const { fullName, phone, email, password } = userData;
 
@@ -131,6 +166,7 @@ export default {
   login,
   register,
   checkEmailExists,
+  resetPassword,
   blacklistToken,
   isTokenBlacklisted,
 };

@@ -22,6 +22,22 @@ const sendRegisterCode = async (email, code) => {
   });
 };
 
+const sendForgotPasswordCode = async (email, code) => {
+  await transporter.sendMail({
+    from: `"Auto Wash Pro" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: "Mã xác minh đặt lại mật khẩu Auto Wash Pro",
+    html: `
+      <h2>Đặt lại mật khẩu</h2>
+      <p>Mã xác minh của bạn là:</p>
+      <h1 style="letter-spacing: 4px;">${code}</h1>
+      <p>Mã này có hiệu lực trong 5 phút.</p>
+      <p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p>
+    `,
+  });
+};
+
 export default {
   sendRegisterCode,
+  sendForgotPasswordCode,
 };
