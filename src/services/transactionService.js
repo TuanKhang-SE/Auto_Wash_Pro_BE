@@ -23,6 +23,7 @@ const handleLoyaltyAfterPayment = async (tx, transaction) => {
     where: { CustomerID: transaction.CustomerID },
     data: {
       TotalSpent: { increment: finalAmount },
+      TotalVisits: { increment: 1 },
     }
   });
 
@@ -322,6 +323,19 @@ const applyDiscount = async (transactionId, promotionId) => {
 
   const result = await prisma.$transaction(async (tx) => {
 
+    const existingReward = await tx.transactionDiscounts.findFirst({
+      where: {
+        BookingGroupID: transaction.BookingGroupID,
+        DiscountType: 'REWARD'
+      }
+    });
+    if (existingReward && existingReward.ReferenceID) {
+      await tx.rewardRedemptions.update({
+        where: { RedemptionID: existingReward.ReferenceID },
+        data: { Status: "UNUSED" }
+      });
+    }
+
     await tx.transactionDiscounts.deleteMany({
       where: {
         BookingGroupID: transaction.BookingGroupID,
@@ -414,6 +428,19 @@ const applyReward = async (transactionId, redemptionId) => {
   const newFinalAmount = baseAmount - totalDiscount;
 
   const result = await prisma.$transaction(async (tx) => {
+
+    const existingReward = await tx.transactionDiscounts.findFirst({
+      where: {
+        BookingGroupID: transaction.BookingGroupID,
+        DiscountType: 'REWARD'
+      }
+    });
+    if (existingReward && existingReward.ReferenceID) {
+      await tx.rewardRedemptions.update({
+        where: { RedemptionID: existingReward.ReferenceID },
+        data: { Status: "UNUSED" }
+      });
+    }
 
     await tx.transactionDiscounts.deleteMany({
       where: {
