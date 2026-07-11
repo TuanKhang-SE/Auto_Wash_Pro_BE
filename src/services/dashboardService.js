@@ -83,6 +83,78 @@ const getDailyCashflow = async (branchId, role, startDate, endDate) => {
   return { totalRevenue, breakdown };
 };
 
+const getRevenueByBranch = async (role, userBranchId, startDate, endDate) => {
+  let dateFilter = {};
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    dateFilter = { ConfirmedAt: { gte: start, lte: end } };
+  }
+
+  let branchFilter = {};
+  if (role === "Manager" && userBranchId) {
+    branchFilter = { BranchID: userBranchId };
+  }
+
+  const branches = await prisma.branches.findMany({
+    where: branchFilter,
+    select: {
+      BranchID: true,
+      BranchName: true,
+      BookingGroups: {
+        select: {
+          Transactions: {
+            select: {
+              PaymentRecords: {
+                where: { Status: "Success", ...dateFilter },
+                select: { Amount: true }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  let totalRevenueAll = 0;
+  let totalBookingsAll = 0;
+  const branchRevenues = branches.map(branch => {
+    let branchTotal = 0;
+    let branchBookings = 0;
+    branch.BookingGroups.forEach(group => {
+      let hasValidPayment = false;
+      group.Transactions.forEach(tx => {
+        tx.PaymentRecords.forEach(payment => {
+          branchTotal += parseFloat(payment.Amount || 0);
+          hasValidPayment = true;
+        });
+      });
+      if (hasValidPayment) {
+        branchBookings++;
+      }
+    });
+
+    totalRevenueAll += branchTotal;
+    totalBookingsAll += branchBookings;
+
+    return {
+      branchId: branch.BranchID,
+      branchName: branch.BranchName,
+      totalRevenue: branchTotal,
+      totalBookings: branchBookings
+    };
+  });
+
+  return {
+    totalRevenueAll,
+    totalBookingsAll,
+    branches: branchRevenues
+  };
+};
+
 export default {
   getDailyCashflow,
+  getRevenueByBranch,
 };

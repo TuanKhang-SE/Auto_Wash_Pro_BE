@@ -52,4 +52,47 @@ router.get(
   dashboardController.getDailyCashflow
 );
 
+/**
+ * @openapi
+ * /api/dashboard/revenue-by-branch:
+ *   get:
+ *     summary: Lấy báo cáo tổng doanh thu theo từng chi nhánh
+ *     tags: ["Báo cáo & Đối soát"]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Ngày bắt đầu (Ví dụ 2026-06-01). Mặc định lấy từ đầu hệ thống.
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Ngày kết thúc (Ví dụ 2026-06-30). Mặc định đến hiện tại.
+ *     responses:
+ *       200:
+ *         description: Báo cáo thành công
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 totalRevenueAll: 50000000
+ *                 totalBookingsAll: 150
+ *                 branches: [
+ *                   { branchId: 1, branchName: "Chi nhánh 1", totalRevenue: 20000000, totalBookings: 60 },
+ *                   { branchId: 2, branchName: "Chi nhánh 2", totalRevenue: 30000000, totalBookings: 90 }
+ *                 ]
+ */
+router.get(
+  "/revenue-by-branch",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager"]),
+  dashboardController.getRevenueByBranch
+);
+
 export default router;
