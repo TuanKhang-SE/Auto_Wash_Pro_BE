@@ -98,6 +98,10 @@ app.use("/api/rewards", rewardRoute);
 import invoiceRoute from "./src/routes/invoiceRoute.js";
 app.use("/api/invoices", invoiceRoute);
 
+// Review Routes
+import reviewRoute from "./src/routes/reviewRoute.js";
+app.use("/api/reviews", reviewRoute);
+
 // Start Server
 app.listen(PORT, () => {
   console.log(` Server running at http://localhost:${PORT}`);

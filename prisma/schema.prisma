@@ -33,6 +33,7 @@ model BookingGroups {
   BookingItems         BookingItems[]
   TransactionDiscounts TransactionDiscounts[]
   Transactions         Transactions[]
+  Reviews              Reviews?
 }
 
 model BookingItems {
@@ -76,7 +77,8 @@ model branches {
   Promotions     Promotions[]
   Users          Users[]
   Latitude  Float?
-Longitude Float?
+  Longitude Float?
+  Reviews   Reviews[]
 }
 
 model BranchServices {
@@ -102,6 +104,7 @@ model Customers {
   TransactionDiscounts TransactionDiscounts[]
   Transactions         Transactions[]
   Vehicles             Vehicles[]
+  Reviews              Reviews[]
 }
 
 model Invoices {
@@ -311,4 +314,18 @@ model Vehicles {
   CreatedAt    DateTime?      @default(now(), map: "DF__Vehicles__Create__68487DD7") @db.DateTime
   BookingItems BookingItems[]
   Customers    Customers      @relation(fields: [CustomerID], references: [CustomerID], onUpdate: NoAction, map: "FK__Vehicles__Custom__693CA210")
+}
+
+model Reviews {
+  ReviewID       Int           @id @default(autoincrement())
+  BookingGroupID Int           @unique
+  CustomerID     Int
+  BranchID       Int
+  Rating         Int
+  Comment        String?       @db.NVarChar(Max)
+  CreatedAt      DateTime?     @default(now()) @db.DateTime
+
+  BookingGroups  BookingGroups @relation(fields: [BookingGroupID], references: [BookingGroupID], onUpdate: NoAction)
+  Customers      Customers     @relation(fields: [CustomerID], references: [CustomerID], onUpdate: NoAction)
+  branches       branches      @relation(fields: [BranchID], references: [BranchID], onUpdate: NoAction)
 }
