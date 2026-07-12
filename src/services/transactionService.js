@@ -5,6 +5,14 @@ const handleLoyaltyAfterPayment = async (tx, transaction) => {
   const finalAmount = parseFloat(transaction.FinalAmount);
   if (finalAmount <= 0) return;
 
+  const customer = await tx.customers.update({
+    where: { CustomerID: transaction.CustomerID },
+    data: {
+      TotalSpent: { increment: finalAmount },
+      TotalVisits: { increment: 1 },
+    }
+  });
+
   const loyaltyAccount = await tx.loyaltyAccounts.findFirst({
     where: { CustomerID: transaction.CustomerID },
     include: { tier_configs: true }
@@ -16,16 +24,7 @@ const handleLoyaltyAfterPayment = async (tx, transaction) => {
   const multiplier = loyaltyAccount.tier_configs?.PointMultiplier ? parseFloat(loyaltyAccount.tier_configs.PointMultiplier) : 1;
 
 
-  const earnedPoints = Math.floor(finalAmount / pointRate) * multiplier;
-
-
-  const customer = await tx.customers.update({
-    where: { CustomerID: transaction.CustomerID },
-    data: {
-      TotalSpent: { increment: finalAmount },
-      TotalVisits: { increment: 1 },
-    }
-  });
+  const earnedPoints = Math.floor(Math.floor(finalAmount / pointRate) * multiplier);
 
 
   let newTierId = loyaltyAccount.TierID;
