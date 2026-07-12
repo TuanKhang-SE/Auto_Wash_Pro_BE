@@ -491,6 +491,76 @@ const applyReward = async (transactionId, redemptionId) => {
   return result;
 };
 
+const removeDiscount = async (transactionId) => {
+  const transaction = await prisma.transactions.findUnique({
+    where: { TransactionID: transactionId },
+    include: { BookingGroups: true }
+  });
+
+  if (!transaction) throw new Error("Không tìm thấy hóa đơn");
+  if (transaction.Status !== "Pending") {
+    throw new Error("Chỉ có thể gỡ khuyến mãi cho hóa đơn chưa thanh toán");
+  }
+
+  const baseAmount = parseFloat(transaction.Subtotal);
+
+  const loyaltyAccount = await prisma.loyaltyAccounts.findFirst({
+    where: { CustomerID: transaction.CustomerID },
+    include: { tier_configs: true }
+  });
+
+  const tierDiscountPercent = loyaltyAccount?.tier_configs?.DiscountPercent ? parseFloat(loyaltyAccount.tier_configs.DiscountPercent) : 0;
+  const tierDiscountAmount = (baseAmount * tierDiscountPercent) / 100;
+  
+  const newFinalAmount = baseAmount - tierDiscountAmount;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existingReward = await tx.transactionDiscounts.findFirst({
+      where: {
+        BookingGroupID: transaction.BookingGroupID,
+        DiscountType: 'REWARD'
+      }
+    });
+    if (existingReward && existingReward.ReferenceID) {
+      await tx.rewardRedemptions.update({
+        where: { RedemptionID: existingReward.ReferenceID },
+        data: { Status: "UNUSED" }
+      });
+    }
+
+    await tx.transactionDiscounts.deleteMany({
+      where: {
+        BookingGroupID: transaction.BookingGroupID,
+        DiscountType: { in: ['PROMOTION', 'TIER', 'REWARD'] }
+      }
+    });
+
+    const updatedTx = await tx.transactions.update({
+      where: { TransactionID: transactionId },
+      data: {
+        DiscountAmount: tierDiscountAmount,
+        FinalAmount: newFinalAmount
+      }
+    });
+
+    if (tierDiscountAmount > 0) {
+      await tx.transactionDiscounts.create({
+        data: {
+          BookingGroupID: transaction.BookingGroupID,
+          CustomerID: transaction.CustomerID,
+          DiscountType: "TIER",
+          DiscountAmount: tierDiscountAmount,
+          DiscountName: `Giảm giá hạng ${loyaltyAccount.tier_configs.TierName}`
+        }
+      });
+    }
+
+    return updatedTx;
+  });
+
+  return result;
+};
+
 export default {
   createFromBooking,
   payManual,
@@ -498,4 +568,5 @@ export default {
   vnpayIPN,
   applyDiscount,
   applyReward,
+  removeDiscount,
 };
