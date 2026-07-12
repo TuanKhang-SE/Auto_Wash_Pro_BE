@@ -62,8 +62,30 @@ const addServices = async (req, res) => {
   }
 };
 
+const createWalkInBooking = async (req, res) => {
+  try {
+    const branchId = req.user.branchId;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "Nhân viên chưa được phân bổ về chi nhánh nào" });
+    }
+
+    const { Phone, Items } = req.body;
+    
+    const result = await staffOperationService.createWalkInBooking(
+      branchId,
+      Phone,
+      Items
+    );
+    
+    res.status(201).json({ success: true, message: "Tạo đơn tại quầy thành công", data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 export default {
   getTodayBookings,
   updateItemStatus,
   addServices,
+  createWalkInBooking,
 };

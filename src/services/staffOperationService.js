@@ -152,8 +152,125 @@ const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
   return { message: "Thêm dịch vụ phát sinh thành công" };
 };
 
+const createWalkInBooking = async (branchId, phone, items) => {
+  return await prisma.$transaction(async (tx) => {
+    let customerId = null;
+
+
+    if (phone) {
+      const user = await tx.users.findUnique({
+        where: { Phone: phone }
+      });
+      if (user) {
+        const customer = await tx.customers.findFirst({
+          where: { UserID: user.UserID }
+        });
+        if (customer) {
+          customerId = customer.CustomerID;
+        }
+      }
+    }
+
+
+    if (!customerId) {
+      for (const item of items) {
+        const vehicle = await tx.vehicles.findFirst({
+          where: { LicensePlate: item.LicensePlate, Status: "Active" }
+        });
+        if (vehicle) {
+          customerId = vehicle.CustomerID;
+          break;
+        }
+      }
+    }
+
+
+    if (!customerId) {
+      const newCustomer = await tx.customers.create({
+        data: {
+          UserID: null,
+          TotalVisits: 0,
+          TotalSpent: 0,
+        }
+      });
+      customerId = newCustomer.CustomerID;
+    }
+
+
+    const newBooking = await tx.bookingGroups.create({
+      data: {
+        CustomerID: customerId,
+        BranchID: branchId,
+        BookingDate: new Date(),
+        StartTime: new Date(),
+        Status: "Pending",
+        Notes: "Khách vãng lai (Walk-in)"
+      }
+    });
+
+    for (const item of items) {
+
+      let vehicle = await tx.vehicles.findFirst({
+        where: { LicensePlate: item.LicensePlate, Status: "Active" }
+      });
+
+      if (!vehicle) {
+        vehicle = await tx.vehicles.create({
+          data: {
+            CustomerID: customerId,
+            LicensePlate: item.LicensePlate,
+            VehicleType: item.VehicleType || "Sedan",
+            Brand: item.Brand || "Khác",
+            Model: item.Model || "Khác",
+            Status: "Active"
+          }
+        });
+      }
+
+
+      const bookingItem = await tx.bookingItems.create({
+        data: {
+          BookingGroupID: newBooking.BookingGroupID,
+          VehicleID: vehicle.VehicleID,
+          Status: "Pending"
+        }
+      });
+
+
+      const branchServices = await tx.branchServices.findMany({
+        where: {
+          BranchID: branchId,
+          ServiceID: { in: item.Services },
+          Status: "Active"
+        },
+        include: { Services: true }
+      });
+
+      if (branchServices.length !== item.Services.length) {
+        throw new Error(`Một số dịch vụ cho xe ${item.LicensePlate} không hợp lệ tại chi nhánh này`);
+      }
+
+      for (const bs of branchServices) {
+        const price = bs.CustomPrice || bs.Services.BasePrice;
+        await tx.serviceLineItems.create({
+          data: {
+            BookingItemID: bookingItem.BookingItemID,
+            ServiceID: bs.ServiceID,
+            Quantity: 1,
+            UnitPrice: price,
+            LineTotal: price
+          }
+        });
+      }
+    }
+
+    return newBooking;
+  });
+};
+
 export default {
   getTodayBookings,
   updateBookingItemStatus,
   addServicesToItem,
+  createWalkInBooking,
 };
