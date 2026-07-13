@@ -3,12 +3,13 @@ import staffOperationService from "../services/staffOperationService.js";
 const getTodayBookings = async (req, res) => {
   try {
     const branchId = req.user.branchId;
-    const { customerName, status } = req.query;
+    const { customerName, status, bookingDate } = req.query;
 
     const bookings = await staffOperationService.getTodayBookings(
       branchId,
       customerName,
       status,
+      bookingDate,
     );
     res.json({ success: true, data: bookings });
   } catch (error) {
@@ -45,7 +46,11 @@ const addServices = async (req, res) => {
     const itemId = parseInt(req.params.id);
     const branchId = req.user.branchId;
     const { serviceIds } = req.body;
-    if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+    if (
+      !Array.isArray(serviceIds) ||
+      serviceIds.length === 0 ||
+      serviceIds.some((id) => !Number.isInteger(id) || id <= 0)
+    ) {
       return res
         .status(400)
         .json({ success: false, message: "Danh sách dịch vụ không hợp lệ" });
@@ -67,7 +72,11 @@ const updateServices = async (req, res) => {
     const itemId = parseInt(req.params.id);
     const branchId = req.user.branchId;
     const { serviceIds } = req.body;
-    if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+    if (
+      !Array.isArray(serviceIds) ||
+      serviceIds.length === 0 ||
+      serviceIds.some((id) => !Number.isInteger(id) || id <= 0)
+    ) {
       return res
         .status(400)
         .json({ success: false, message: "Danh sách dịch vụ không hợp lệ" });

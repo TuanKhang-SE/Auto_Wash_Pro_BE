@@ -87,6 +87,18 @@ const getMyBookings = async (req, res) => {
             },
           },
         },
+        Transactions: {
+          select: {
+            TransactionID: true,
+            Subtotal: true,
+            DiscountAmount: true,
+            FinalAmount: true,
+            Status: true,
+            CreatedAt: true,
+          },
+          orderBy: { CreatedAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: { CreatedAt: "desc" },
     });

@@ -1,7 +1,14 @@
 import prisma from "../config/prisma.js";
 
-const getTodayBookings = async (branchId, customerName, status) => {
-  const today = new Date();
+const getTodayBookings = async (branchId, customerName, status, bookingDate) => {
+  const today = bookingDate
+    ? new Date(`${bookingDate}T00:00:00`)
+    : new Date();
+
+  if (Number.isNaN(today.getTime())) {
+    throw new Error("Ngày xem booking không hợp lệ");
+  }
+
   today.setHours(0, 0, 0, 0);
 
   const tomorrow = new Date(today);
@@ -111,8 +118,8 @@ const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
   if (!item) throw new Error("Không tìm thấy xe này trong đơn đặt lịch");
   if (item.BookingGroups.BranchID !== branchId)
     throw new Error("Xe này không thuộc chi nhánh của bạn");
-  if (item.Status === "Completed")
-    throw new Error("Xe đã rửa xong, không thể thêm dịch vụ");
+  if (item.Status !== "CheckedIn")
+    throw new Error("Chỉ có thể thêm dịch vụ khi xe đang ở bước Check-in");
 
   const branchServices = await prisma.branchServices.findMany({
     where: {
@@ -135,7 +142,7 @@ const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
     for (const bs of branchServices) {
       if (existingServiceIds.includes(bs.ServiceID)) continue;
 
-      const price = bs.CustomPrice || bs.Services.BasePrice;
+      const price = bs.PriceOverride ?? bs.Services.BasePrice;
       await tx.serviceLineItems.create({
         data: {
           BookingItemID: bookingItemId,
@@ -161,8 +168,12 @@ const updateServicesToItem = async (bookingItemId, branchId, serviceIds) => {
   if (!item) throw new Error("Không tìm thấy xe này trong đơn đặt lịch");
   if (item.BookingGroups.BranchID !== branchId)
     throw new Error("Xe này không thuộc chi nhánh của bạn");
-  if (item.Status === "Completed")
-    throw new Error("Xe đã rửa xong, không thể thay đổi dịch vụ");
+  if (item.Status !== "CheckedIn")
+    throw new Error("Chỉ có thể sửa hoặc xóa dịch vụ khi xe đang ở bước Check-in");
+
+  if (serviceIds.length < 1) {
+    throw new Error("Mỗi xe phải có ít nhất một dịch vụ");
+  }
 
   const branchServices = await prisma.branchServices.findMany({
     where: {
@@ -195,7 +206,7 @@ const updateServicesToItem = async (bookingItemId, branchId, serviceIds) => {
 
     for (const bs of branchServices) {
       if (servicesToAdd.includes(bs.ServiceID)) {
-        const price = bs.CustomPrice || bs.Services.BasePrice;
+        const price = bs.PriceOverride ?? bs.Services.BasePrice;
         await tx.serviceLineItems.create({
           data: {
             BookingItemID: bookingItemId,
@@ -312,7 +323,7 @@ const createWalkInBooking = async (branchId, phone, items) => {
       }
 
       for (const bs of branchServices) {
-        const price = bs.CustomPrice || bs.Services.BasePrice;
+        const price = bs.PriceOverride ?? bs.Services.BasePrice;
         await tx.serviceLineItems.create({
           data: {
             BookingItemID: bookingItem.BookingItemID,
