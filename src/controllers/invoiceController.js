@@ -1,5 +1,17 @@
 import invoiceService from "../services/invoiceService.js";
 
+const getIssuedInvoices = async (req, res) => {
+  try {
+    const invoices = await invoiceService.getIssuedInvoices(
+      req.user.branchId,
+      req.user.role,
+    );
+    res.json({ success: true, data: invoices });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 const getInvoicePreview = async (req, res) => {
   try {
     const transactionId = parseInt(req.params.transactionId);
@@ -41,6 +53,7 @@ const cancelInvoice = async (req, res) => {
 };
 
 export default {
+  getIssuedInvoices,
   getInvoicePreview,
   generateInvoice,
   getInvoiceById,

@@ -123,13 +123,6 @@ const createBooking = async (customerId, data) => {
   if (targetSlot.Available < Items.length)
     throw new Error(`Khung giờ này chỉ còn ${targetSlot.Available} chỗ trống`);
 
-  const config = await prisma.branch_configs.findFirst({ where: { BranchID } });
-  if (config.MaxCarsPerBooking && Items.length > config.MaxCarsPerBooking) {
-    throw new Error(
-      `Bạn chỉ được đặt tối đa ${config.MaxCarsPerBooking} xe trong 1 đơn`,
-    );
-  }
-
   const vehicleIds = Items.map((i) => i.VehicleID);
   const vehicles = await prisma.vehicles.findMany({
     where: {
