@@ -127,6 +127,23 @@ const applyReward = async (req, res) => {
   }
 };
 
+const removeDiscount = async (req, res) => {
+  try {
+    const transactionId = parseInt(req.params.id);
+    if (isNaN(transactionId)) {
+      return res.status(400).json({ error: "TransactionID không hợp lệ" });
+    }
+
+    const result = await transactionService.removeDiscount(transactionId);
+    res.status(200).json({
+      message: "Gỡ bỏ khuyến mãi thành công",
+      data: result,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 export default {
   createFromBooking,
   payManual,
@@ -135,4 +152,5 @@ export default {
   vnpayIPN,
   applyDiscount,
   applyReward,
+  removeDiscount,
 };

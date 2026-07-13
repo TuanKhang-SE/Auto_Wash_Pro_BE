@@ -210,6 +210,32 @@ router.post(
   transactionController.applyReward,
 );
 
+/**
+ * @openapi
+ * /api/transactions/{id}/discount:
+ *   delete:
+ *     summary: Gỡ bỏ mã khuyến mãi hoặc phần quà khỏi hóa đơn
+ *     tags: ["Giao dịch & Thanh toán"]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID của Giao dịch (Transaction)
+ *     responses:
+ *       200:
+ *         description: Gỡ bỏ thành công
+ */
+router.delete(
+  "/:id/discount",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager", "Staff"]),
+  transactionController.removeDiscount,
+);
+
 router.get("/vnpay-return", transactionController.vnpayReturn);
 router.get("/vnpay-ipn", transactionController.vnpayIPN);
 
