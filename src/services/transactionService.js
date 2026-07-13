@@ -300,6 +300,9 @@ const applyDiscount = async (transactionId, promotionId) => {
     promoDiscount = parseFloat(promotion.DiscountValue);
   }
 
+  if (promoDiscount < 0) {
+    promoDiscount = 0;
+  }
 
   if (promoDiscount > baseAmount) {
     promoDiscount = baseAmount;

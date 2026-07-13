@@ -152,6 +152,67 @@ const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
   return { message: "Thêm dịch vụ phát sinh thành công" };
 };
 
+const updateServicesToItem = async (bookingItemId, branchId, serviceIds) => {
+  const item = await prisma.bookingItems.findUnique({
+    where: { BookingItemID: bookingItemId },
+    include: { BookingGroups: true, ServiceLineItems: true },
+  });
+
+  if (!item) throw new Error("Không tìm thấy xe này trong đơn đặt lịch");
+  if (item.BookingGroups.BranchID !== branchId)
+    throw new Error("Xe này không thuộc chi nhánh của bạn");
+  if (item.Status === "Completed")
+    throw new Error("Xe đã rửa xong, không thể thay đổi dịch vụ");
+
+  const branchServices = await prisma.branchServices.findMany({
+    where: {
+      BranchID: branchId,
+      ServiceID: { in: serviceIds },
+      Status: "Active",
+    },
+    include: { Services: true },
+  });
+
+  if (branchServices.length !== serviceIds.length) {
+    throw new Error(
+      "Một số dịch vụ không hợp lệ hoặc không hỗ trợ tại chi nhánh này",
+    );
+  }
+
+  const existingServiceIds = item.ServiceLineItems.map((s) => s.ServiceID);
+  const servicesToRemove = existingServiceIds.filter(id => !serviceIds.includes(id));
+  const servicesToAdd = serviceIds.filter(id => !existingServiceIds.includes(id));
+
+  await prisma.$transaction(async (tx) => {
+    if (servicesToRemove.length > 0) {
+      await tx.serviceLineItems.deleteMany({
+        where: {
+          BookingItemID: bookingItemId,
+          ServiceID: { in: servicesToRemove }
+        }
+      });
+    }
+
+    for (const bs of branchServices) {
+      if (servicesToAdd.includes(bs.ServiceID)) {
+        const price = bs.CustomPrice || bs.Services.BasePrice;
+        await tx.serviceLineItems.create({
+          data: {
+            BookingItemID: bookingItemId,
+            ServiceID: bs.ServiceID,
+            Quantity: 1,
+            UnitPrice: price,
+            LineTotal: price,
+            Note: "Sửa/Đổi tại quán",
+          },
+        });
+      }
+    }
+  });
+
+  return { message: "Cập nhật dịch vụ thành công" };
+};
+
 const createWalkInBooking = async (branchId, phone, items) => {
   return await prisma.$transaction(async (tx) => {
     let customerId = null;
@@ -272,5 +333,6 @@ export default {
   getTodayBookings,
   updateBookingItemStatus,
   addServicesToItem,
+  updateServicesToItem,
   createWalkInBooking,
 };

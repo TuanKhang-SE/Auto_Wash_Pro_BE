@@ -1,9 +1,36 @@
 import express from "express";
+import { z } from "zod";
 import promotionController from "../controllers/promotionController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import roleMiddleware from "../middlewares/roleMiddleware.js";
+import validate from "../middlewares/validateMiddleware.js";
 
 const router = express.Router();
+
+const promotionSchema = z.object({
+  PromotionName: z.string().min(1, "Tên khuyến mãi không được để trống"),
+  DiscountType: z.enum(["PERCENTAGE", "FIXED_AMOUNT"], {
+    errorMap: () => ({ message: "Loại giảm giá phải là PERCENTAGE hoặc FIXED_AMOUNT" })
+  }),
+  DiscountValue: z.number().min(0, "Giá trị giảm giá không được nhỏ hơn 0"),
+  StartDate: z.string().datetime({ message: "Ngày bắt đầu không hợp lệ (ISO 8601)" }).optional(),
+  EndDate: z.string().datetime({ message: "Ngày kết thúc không hợp lệ (ISO 8601)" }).optional(),
+  UsageLimit: z.number().int().min(1, "Giới hạn sử dụng phải lớn hơn 0").optional().nullable(),
+  BranchID: z.number().int().positive().optional().nullable()
+});
+
+const promotionUpdateSchema = z.object({
+  PromotionName: z.string().min(1, "Tên khuyến mãi không được để trống").optional(),
+  DiscountType: z.enum(["PERCENTAGE", "FIXED_AMOUNT"], {
+    errorMap: () => ({ message: "Loại giảm giá phải là PERCENTAGE hoặc FIXED_AMOUNT" })
+  }).optional(),
+  DiscountValue: z.number().min(0, "Giá trị giảm giá không được nhỏ hơn 0").optional(),
+  StartDate: z.string().datetime({ message: "Ngày bắt đầu không hợp lệ (ISO 8601)" }).optional(),
+  EndDate: z.string().datetime({ message: "Ngày kết thúc không hợp lệ (ISO 8601)" }).optional(),
+  UsageLimit: z.number().int().min(1, "Giới hạn sử dụng phải lớn hơn 0").optional().nullable(),
+  BranchID: z.number().int().positive().optional().nullable(),
+  Status: z.string().optional()
+});
 
 /**
  * @openapi
@@ -62,7 +89,7 @@ router.get("/active", promotionController.getActivePromotions);
  *         description: Tạo thành công
  */
 router.get("/", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotionController.getAllPromotions);
-router.post("/", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotionController.createPromotion);
+router.post("/", authMiddleware, roleMiddleware(["Admin", "Manager"]), validate(promotionSchema), promotionController.createPromotion);
 
 /**
  * @openapi
@@ -117,7 +144,7 @@ router.post("/", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotion
  *         description: Xóa thành công
  */
 router.get("/:id", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotionController.getPromotionById);
-router.put("/:id", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotionController.updatePromotion);
+router.put("/:id", authMiddleware, roleMiddleware(["Admin", "Manager"]), validate(promotionUpdateSchema), promotionController.updatePromotion);
 router.delete("/:id", authMiddleware, roleMiddleware(["Admin", "Manager"]), promotionController.deletePromotion);
 
 export default router;

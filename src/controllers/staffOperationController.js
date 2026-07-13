@@ -62,6 +62,28 @@ const addServices = async (req, res) => {
   }
 };
 
+const updateServices = async (req, res) => {
+  try {
+    const itemId = parseInt(req.params.id);
+    const branchId = req.user.branchId;
+    const { serviceIds } = req.body;
+    if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Danh sách dịch vụ không hợp lệ" });
+    }
+
+    const result = await staffOperationService.updateServicesToItem(
+      itemId,
+      branchId,
+      serviceIds,
+    );
+    res.json({ success: true, message: result.message });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 const createWalkInBooking = async (req, res) => {
   try {
     const branchId = req.user.branchId;
@@ -87,5 +109,6 @@ export default {
   getTodayBookings,
   updateItemStatus,
   addServices,
+  updateServices,
   createWalkInBooking,
 };

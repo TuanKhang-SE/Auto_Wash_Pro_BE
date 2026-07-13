@@ -109,6 +109,44 @@ router.post(
   staffOperationController.addServices
 );
 
+/**
+ * @swagger
+ * /api/staff-operations/booking-items/{id}/update-services:
+ *   put:
+ *     summary: Cập nhật (sửa/đổi) dịch vụ phát sinh cho 1 xe (dành cho nhân viên)
+ *     description: Xóa các dịch vụ cũ và thêm các dịch vụ mới theo danh sách truyền vào
+ *     tags: ["Vận hành (Staff Operations)"]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               serviceIds:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 2, 3]
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
+router.put(
+  "/booking-items/:id/update-services",
+  authMiddleware,
+  roleMiddleware(["Staff", "Manager"]),
+  staffOperationController.updateServices
+);
+
 const walkInBookingSchema = z.object({
   Phone: z.string().optional(),
   Items: z.array(

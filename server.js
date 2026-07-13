@@ -102,6 +102,10 @@ app.use("/api/invoices", invoiceRoute);
 import reviewRoute from "./src/routes/reviewRoute.js";
 app.use("/api/reviews", reviewRoute);
 
+// Start Cronjobs
+import { startCronJobs } from "./src/cronjobs/index.js";
+startCronJobs();
+
 // Start Server
 app.listen(PORT, () => {
   console.log(` Server running at http://localhost:${PORT}`);
