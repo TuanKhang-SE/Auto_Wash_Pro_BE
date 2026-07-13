@@ -5,6 +5,13 @@ import roleMiddleware from "../middlewares/roleMiddleware.js";
 
 const router = express.Router();
 
+router.get(
+  "/",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager", "Staff"]),
+  invoiceController.getIssuedInvoices,
+);
+
 /**
  * @openapi
  * /api/invoices/preview/{transactionId}:

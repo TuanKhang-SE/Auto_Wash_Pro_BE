@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import morgan from "morgan";
+import cookieParser from "cookie-parser";
 
 import authRoute from "./src/routes/authRoute.js";
 import setupSwagger from "./src/config/swagger.js";
@@ -12,8 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
+
 app.use(express.json());
+app.use(cookieParser());
 app.use(morgan("dev"));
 
 // Setup Swagger

@@ -62,6 +62,59 @@ const getInvoicePreview = async (transactionId) => {
   return transaction;
 };
 
+const getIssuedInvoices = async (branchId, role) => {
+  const where = {
+    Status: "ISSUED",
+  };
+
+  if (role === "Staff" || role === "Manager") {
+    if (!branchId) {
+      throw new Error("Tài khoản chưa được phân bổ về chi nhánh nào");
+    }
+
+    where.Transactions = {
+      BookingGroups: {
+        BranchID: branchId,
+      },
+    };
+  }
+
+  return await prisma.invoices.findMany({
+    where,
+    include: {
+      Transactions: {
+        include: {
+          BookingGroups: {
+            include: {
+              branches: true,
+              BookingItems: {
+                include: {
+                  Vehicles: true,
+                  ServiceLineItems: {
+                    include: { Services: true },
+                  },
+                },
+              },
+            },
+          },
+          Customers: {
+            include: {
+              Users: {
+                select: { FullName: true, Phone: true },
+              },
+            },
+          },
+          PaymentRecords: {
+            where: { Status: "Success" },
+            orderBy: { ConfirmedAt: "desc" },
+          },
+        },
+      },
+    },
+    orderBy: [{ IssuedAt: "desc" }, { InvoiceID: "desc" }],
+  });
+};
+
 
 const generateInvoice = async (transactionId) => {
   const transaction = await fetchInvoiceFullData(transactionId);
@@ -112,6 +165,7 @@ const cancelInvoice = async (invoiceId) => {
 };
 
 export default {
+  getIssuedInvoices,
   getInvoicePreview,
   generateInvoice,
   getInvoiceById,
