@@ -1,14 +1,6 @@
 import prisma from "../config/prisma.js";
 
-const createReview = async (userId, bookingGroupId, rating, comment) => {
-  const customer = await prisma.customers.findFirst({
-    where: { UserID: userId },
-  });
-
-  if (!customer) {
-    throw new Error("Không tìm thấy hồ sơ khách hàng của bạn");
-  }
-
+const createReview = async (actor, bookingGroupId, rating, comment) => {
   const booking = await prisma.bookingGroups.findUnique({
     where: { BookingGroupID: bookingGroupId },
     include: { Transactions: true }
@@ -18,8 +10,24 @@ const createReview = async (userId, bookingGroupId, rating, comment) => {
     throw new Error("Không tìm thấy hóa đơn đặt lịch");
   }
 
-  if (booking.CustomerID !== customer.CustomerID) {
-    throw new Error("Bạn không có quyền đánh giá hóa đơn của người khác");
+  let customerId = booking.CustomerID;
+
+  if (actor.role === "Customer") {
+    const customer = await prisma.customers.findFirst({
+      where: { UserID: actor.userId },
+    });
+
+    if (!customer) {
+      throw new Error("Không tìm thấy hồ sơ khách hàng của bạn");
+    }
+    if (booking.CustomerID !== customer.CustomerID) {
+      throw new Error("Bạn không có quyền đánh giá hóa đơn của người khác");
+    }
+    customerId = customer.CustomerID;
+  } else if (actor.role === "Staff") {
+    if (!actor.branchId || booking.BranchID !== actor.branchId) {
+      throw new Error("Bạn không có quyền đánh giá booking của chi nhánh khác");
+    }
   }
 
   if (booking.Status !== "Completed") {
@@ -42,7 +50,7 @@ const createReview = async (userId, bookingGroupId, rating, comment) => {
   const review = await prisma.reviews.create({
     data: {
       BookingGroupID: bookingGroupId,
-      CustomerID: customer.CustomerID,
+      CustomerID: customerId,
       BranchID: booking.BranchID,
       Rating: rating,
       Comment: comment,

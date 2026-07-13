@@ -38,7 +38,8 @@ const fetchInvoiceFullData = async (transactionId) => {
               Vehicles: true
             }
           },
-          TransactionDiscounts: true
+          TransactionDiscounts: true,
+          Reviews: true
         }
       },
       Customers: {
@@ -95,6 +96,7 @@ const getIssuedInvoices = async (branchId, role) => {
                   },
                 },
               },
+              Reviews: true,
             },
           },
           Customers: {

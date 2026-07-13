@@ -10,7 +10,7 @@ const router = express.Router();
 
 const createSchema = z.object({
   LicensePlate: z.string().min(1, "Biển số xe không được để trống"),
-  VehicleType: z.string().optional(),
+  VehicleType: z.enum(["Xe máy", "Xe tay ga", "Mô tô"]),
   Brand: z.string().optional(),
   Model: z.string().optional(),
   Color: z.string().optional(),
@@ -19,7 +19,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   LicensePlate: z.string().min(1).optional(),
-  VehicleType: z.string().optional(),
+  VehicleType: z.enum(["Xe máy", "Xe tay ga", "Mô tô"]).optional(),
   Brand: z.string().optional(),
   Model: z.string().optional(),
   Color: z.string().optional(),

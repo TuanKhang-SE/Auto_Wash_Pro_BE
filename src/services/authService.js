@@ -67,13 +67,21 @@ const resetPassword = async (email, newPassword) => {
   const pool = await poolPromise;
 
   const existingUser = await pool.request().input("Email", email).query(`
-    SELECT UserID
+    SELECT UserID, PasswordHash
     FROM Users
     WHERE Email = @Email
   `);
 
   if (existingUser.recordset.length === 0) {
     throw new Error("Email không tồn tại");
+  }
+
+  const isOldPassword = await bcrypt.compare(
+    newPassword,
+    existingUser.recordset[0].PasswordHash,
+  );
+  if (isOldPassword) {
+    throw new Error("Mật khẩu mới không được trùng với mật khẩu cũ");
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);

@@ -13,7 +13,7 @@ const saveOtp = (email, code) => {
   });
 };
 
-const verifyOtp = (email, code) => {
+const verifyOtp = (email, code, consume = true) => {
   const key = email.toLowerCase();
   const savedOtp = otpStore.get(key);
 
@@ -40,7 +40,7 @@ const verifyOtp = (email, code) => {
     };
   }
 
-  otpStore.delete(key);
+  if (consume) otpStore.delete(key);
 
   return {
     success: true,
@@ -48,8 +48,13 @@ const verifyOtp = (email, code) => {
   };
 };
 
+const clearOtp = (email) => {
+  otpStore.delete(email.toLowerCase());
+};
+
 export default {
   generateOtp,
   saveOtp,
   verifyOtp,
+  clearOtp,
 };

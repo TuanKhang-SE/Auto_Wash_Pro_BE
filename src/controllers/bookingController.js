@@ -99,6 +99,14 @@ const getMyBookings = async (req, res) => {
           orderBy: { CreatedAt: "desc" },
           take: 1,
         },
+        Reviews: {
+          select: {
+            ReviewID: true,
+            Rating: true,
+            Comment: true,
+            CreatedAt: true,
+          },
+        },
       },
       orderBy: { CreatedAt: "desc" },
     });

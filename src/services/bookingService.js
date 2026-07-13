@@ -124,6 +124,10 @@ const createBooking = async (customerId, data) => {
     throw new Error(`Khung giờ này chỉ còn ${targetSlot.Available} chỗ trống`);
 
   const vehicleIds = Items.map((i) => i.VehicleID);
+  if (new Set(vehicleIds).size !== vehicleIds.length) {
+    throw new Error("Không thể đăng ký trùng một xe nhiều lần trong cùng đơn");
+  }
+
   const vehicles = await prisma.vehicles.findMany({
     where: {
       VehicleID: { in: vehicleIds },
@@ -133,6 +137,36 @@ const createBooking = async (customerId, data) => {
   });
   if (vehicles.length !== vehicleIds.length) {
     throw new Error("Một số xe không tồn tại hoặc không thuộc sở hữu của bạn");
+  }
+
+  const sameDayVehicleBookings = await prisma.bookingItems.findMany({
+    where: {
+      VehicleID: { in: vehicleIds },
+      Status: { not: "Cancelled" },
+      BookingGroups: {
+        BookingDate: new Date(BookingDate),
+        Status: { not: "Cancelled" },
+      },
+    },
+    include: {
+      Vehicles: { select: { LicensePlate: true } },
+      BookingGroups: { select: { StartTime: true } },
+    },
+  });
+
+  const duplicatedSlotVehicles = sameDayVehicleBookings.filter(
+    (item) =>
+      item.BookingGroups.StartTime &&
+      dateToTimeStr(item.BookingGroups.StartTime) === StartTime.substring(0, 5),
+  );
+
+  if (duplicatedSlotVehicles.length > 0) {
+    const plates = duplicatedSlotVehicles
+      .map((item) => item.Vehicles.LicensePlate)
+      .join(", ");
+    throw new Error(
+      `Xe ${plates} đã được đăng ký trong cùng khung giờ. Vui lòng chọn xe hoặc khung giờ khác`,
+    );
   }
 
   const allServiceIds = Items.flatMap((i) =>

@@ -71,7 +71,7 @@ const createVehicle = async (req, res) => {
     const vehicle = await vehicleService.create(data);
     res.status(201).json({ success: true, message: "Thêm xe thành công", data: vehicle });
   } catch (error) {
-    if (error.message.includes("trùng")) {
+    if (error.message.includes("trùng") || error.message.includes("chưa thanh toán")) {
       return res.status(400).json({ success: false, message: error.message });
     }
     res.status(500).json({ success: false, message: error.message });
@@ -102,7 +102,7 @@ const updateVehicle = async (req, res) => {
     const vehicle = await vehicleService.update(id, req.body);
     res.json({ success: true, message: "Cập nhật thành công", data: vehicle });
   } catch (error) {
-    if (error.message.includes("trùng")) {
+    if (error.message.includes("trùng") || error.message.includes("chưa thanh toán")) {
       return res.status(400).json({ success: false, message: error.message });
     }
     res.status(500).json({ success: false, message: error.message });
@@ -130,6 +130,9 @@ const deleteVehicle = async (req, res) => {
     await vehicleService.deleteSoft(id);
     res.json({ success: true, message: "Đã xóa xe (Soft delete)" });
   } catch (error) {
+    if (error.message.includes("chưa thanh toán")) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };

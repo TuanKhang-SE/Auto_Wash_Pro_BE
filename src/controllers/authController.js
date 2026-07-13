@@ -100,7 +100,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    const otpResult = otpService.verifyOtp(email, code);
+    const otpResult = otpService.verifyOtp(email, code, false);
 
     if (!otpResult.success) {
       return res.status(400).json({
@@ -110,6 +110,7 @@ const resetPassword = async (req, res) => {
     }
 
     await authService.resetPassword(email, newPassword);
+    otpService.clearOtp(email);
 
     res.status(200).json({
       success: true,

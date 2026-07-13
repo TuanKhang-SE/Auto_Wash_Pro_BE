@@ -41,7 +41,7 @@ const createReviewSchema = z.object({
 router.post(
   "/",
   authMiddleware,
-  roleMiddleware(["Customer"]),
+  roleMiddleware(["Customer", "Staff"]),
   validate(createReviewSchema),
   reviewController.createReview
 );

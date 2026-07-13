@@ -64,6 +64,26 @@ const getById = async (id) => {
   });
 };
 
+const assertCanModify = async (id) => {
+  const activeBookingItem = await prisma.bookingItems.findFirst({
+    where: {
+      VehicleID: id,
+      Status: { not: "Cancelled" },
+      BookingGroups: {
+        Status: { not: "Cancelled" },
+        Transactions: { none: { Status: "Paid" } },
+      },
+    },
+    select: { BookingItemID: true },
+  });
+
+  if (activeBookingItem) {
+    throw new Error(
+      "Xe đang có lịch hẹn chưa thanh toán nên không thể chỉnh sửa hoặc xóa",
+    );
+  }
+};
+
 
 const create = async (data) => {
 
@@ -86,6 +106,8 @@ const create = async (data) => {
 
 const update = async (id, data) => {
 
+  await assertCanModify(id);
+
   if (data.LicensePlate) {
     const existing = await prisma.vehicles.findFirst({
       where: {
@@ -105,6 +127,7 @@ const update = async (id, data) => {
 
 
 const deleteSoft = async (id) => {
+  await assertCanModify(id);
   return await prisma.vehicles.update({
     where: { VehicleID: id },
     data: { Status: "Inactive" },
