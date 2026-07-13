@@ -39,7 +39,17 @@ const updateProfile = async (req, res) => {
   }
 };
 
+const getAllCustomers = async (req, res) => {
+  try {
+    const customers = await customerService.getAllCustomers();
+    res.json({ success: true, data: customers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export default {
   getProfile,
   updateProfile,
+  getAllCustomers,
 };

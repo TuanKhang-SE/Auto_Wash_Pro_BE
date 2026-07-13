@@ -95,4 +95,11 @@ router.get(
   dashboardController.getRevenueByBranch
 );
 
+router.get(
+  "/branch-overview",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager"]),
+  dashboardController.getBranchOverview,
+);
+
 export default router;

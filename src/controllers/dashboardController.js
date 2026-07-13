@@ -35,7 +35,18 @@ const getRevenueByBranch = async (req, res) => {
   }
 };
 
+const getBranchOverview = async (req, res) => {
+  try {
+    const { branchId, role } = req.user;
+    const data = await dashboardService.getBranchOverview(role, branchId);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export default {
   getDailyCashflow,
   getRevenueByBranch,
+  getBranchOverview,
 };

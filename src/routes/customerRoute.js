@@ -12,6 +12,13 @@ const updateProfileSchema = z.object({
   Phone: z.string().min(10, "Số điện thoại không hợp lệ").optional(),
 });
 
+router.get(
+  "/",
+  authMiddleware,
+  roleMiddleware(["Admin"]),
+  customerController.getAllCustomers,
+);
+
 /**
  * @openapi
  * /api/customers/profile:

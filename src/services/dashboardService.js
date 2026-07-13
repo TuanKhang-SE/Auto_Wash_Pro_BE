@@ -59,6 +59,7 @@ const getDailyCashflow = async (branchId, role, startDate, endDate) => {
     select: {
       Method: true,
       Amount: true,
+      ConfirmedAt: true,
     },
   });
 
@@ -80,7 +81,139 @@ const getDailyCashflow = async (branchId, role, startDate, endDate) => {
     }
   });
 
-  return { totalRevenue, breakdown };
+  const dailyMap = new Map();
+  records.forEach((record) => {
+    if (!record.ConfirmedAt) return;
+    const date = record.ConfirmedAt;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const current = dailyMap.get(key) || { date: key, cash: 0, transfer: 0, other: 0, total: 0 };
+    const amount = parseFloat(record.Amount || 0);
+    if (record.Method === "CASH") current.cash += amount;
+    else if (record.Method === "BANK_TRANSFER") current.transfer += amount;
+    else current.other += amount;
+    current.total += amount;
+    dailyMap.set(key, current);
+  });
+
+  const dailyData = Array.from(dailyMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+
+  return {
+    totalRevenue,
+    breakdown,
+    dailyData,
+    summary: {
+      totalCash: breakdown.CASH || 0,
+      totalTransfer: breakdown.BANK_TRANSFER || 0,
+      totalOther: Object.entries(breakdown)
+        .filter(([method]) => !["CASH", "BANK_TRANSFER"].includes(method))
+        .reduce((sum, [, amount]) => sum + amount, 0),
+      total: totalRevenue,
+    },
+  };
+};
+
+const getBranchOverview = async (role, userBranchId) => {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const branches = await prisma.branches.findMany({
+    where: role === "Manager" && userBranchId ? { BranchID: userBranchId } : {},
+    include: {
+      Users: {
+        where: { Role: "Staff", Status: "Active" },
+        select: { UserID: true },
+      },
+      branch_configs: true,
+      Reviews: { select: { Rating: true } },
+      BookingGroups: {
+        where: {
+          BookingDate: { gte: monthStart, lt: nextMonthStart },
+          Status: { not: "Cancelled" },
+        },
+        include: {
+          BookingItems: {
+            where: { Status: { not: "Cancelled" } },
+            select: { BookingItemID: true },
+          },
+          Transactions: {
+            include: {
+              PaymentRecords: {
+                where: {
+                  Status: "Success",
+                  ConfirmedAt: { gte: monthStart, lt: nextMonthStart },
+                },
+                select: { Amount: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { BranchID: "asc" },
+  });
+
+  return branches.map((branch) => {
+    const todayBookings = branch.BookingGroups.filter(
+      (booking) =>
+        booking.BookingDate &&
+        booking.BookingDate >= todayStart &&
+        booking.BookingDate < tomorrowStart,
+    );
+    const revenue = branch.BookingGroups.reduce(
+      (sum, booking) =>
+        sum +
+        booking.Transactions.reduce(
+          (txSum, transaction) =>
+            txSum +
+            transaction.PaymentRecords.reduce(
+              (paymentSum, payment) => paymentSum + parseFloat(payment.Amount || 0),
+              0,
+            ),
+          0,
+        ),
+      0,
+    );
+    const rating = branch.Reviews.length
+      ? branch.Reviews.reduce((sum, review) => sum + review.Rating, 0) /
+        branch.Reviews.length
+      : 0;
+
+    const config = branch.branch_configs[0];
+    const openMinutes = branch.OpenTime
+      ? branch.OpenTime.getUTCHours() * 60 + branch.OpenTime.getUTCMinutes()
+      : 7 * 60;
+    const closeMinutes = branch.CloseTime
+      ? branch.CloseTime.getUTCHours() * 60 + branch.CloseTime.getUTCMinutes()
+      : 20 * 60;
+    const slotStep = Math.max(1, (config?.SlotDuration || 30) + (config?.BufferMinutes || 0));
+    const dailyCapacity =
+      Math.max(0, Math.floor((closeMinutes - openMinutes) / slotStep)) *
+      Math.max(1, config?.TotalWashBays || 1);
+    const todayVehicleCount = todayBookings.reduce(
+      (sum, booking) => sum + booking.BookingItems.length,
+      0,
+    );
+
+    return {
+      branchId: branch.BranchID,
+      branchName: branch.BranchName,
+      totalStaff: branch.Users.length,
+      todayBookings: todayBookings.length,
+      monthBookings: branch.BookingGroups.length,
+      revenue,
+      rating: Number(rating.toFixed(1)),
+      reviewCount: branch.Reviews.length,
+      occupancy: dailyCapacity
+        ? Math.min(100, Math.round((todayVehicleCount / dailyCapacity) * 100))
+        : 0,
+    };
+  });
 };
 
 const getRevenueByBranch = async (role, userBranchId, startDate, endDate) => {
@@ -157,4 +290,5 @@ const getRevenueByBranch = async (role, userBranchId, startDate, endDate) => {
 export default {
   getDailyCashflow,
   getRevenueByBranch,
+  getBranchOverview,
 };

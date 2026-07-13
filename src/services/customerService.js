@@ -67,7 +67,46 @@ const updateProfile = async (userId, data) => {
   return updatedUser;
 };
 
+const getAllCustomers = async () => {
+  const users = await prisma.users.findMany({
+    where: { Role: "Customer" },
+    include: {
+      Customers: {
+        include: {
+          LoyaltyAccounts: { include: { tier_configs: true } },
+        },
+      },
+    },
+    orderBy: { CreatedAt: "desc" },
+  });
+
+  return users.map((user) => {
+    const customer = user.Customers[0];
+    const account = customer?.LoyaltyAccounts?.[0];
+    return {
+      userId: user.UserID,
+      customerId: customer?.CustomerID || null,
+      fullName: user.FullName,
+      email: user.Email,
+      phone: user.Phone,
+      status: user.Status,
+      createdAt: user.CreatedAt,
+      totalVisits: customer?.TotalVisits || 0,
+      totalSpent: customer?.TotalSpent || 0,
+      loyalty: {
+        accountId: account?.AccountID || null,
+        currentPoints: account?.CurrentPoints || 0,
+        lifetimePoints: account?.LifetimePoints || 0,
+        tierId: account?.TierID || null,
+        tierName: account?.tier_configs?.TierName || "Chưa có hạng",
+        tierConfig: account?.tier_configs || null,
+      },
+    };
+  });
+};
+
 export default {
   getProfile,
   updateProfile,
+  getAllCustomers,
 };

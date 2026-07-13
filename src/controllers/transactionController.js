@@ -111,6 +111,19 @@ const applyDiscount = async (req, res) => {
   }
 };
 
+const getDiscountOptions = async (req, res) => {
+  try {
+    const transactionId = parseInt(req.params.id);
+    if (isNaN(transactionId)) {
+      return res.status(400).json({ error: "TransactionID không hợp lệ" });
+    }
+    const data = await transactionService.getDiscountOptions(transactionId, req.user);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 const applyReward = async (req, res) => {
   try {
     const transactionId = parseInt(req.params.id);
@@ -151,6 +164,7 @@ export default {
   vnpayReturn,
   vnpayIPN,
   applyDiscount,
+  getDiscountOptions,
   applyReward,
   removeDiscount,
 };

@@ -61,6 +61,15 @@ const handleLoyaltyAfterPayment = async (tx, transaction) => {
   }
 };
 
+const withAppliedDiscounts = async (transaction) => {
+  if (!transaction?.BookingGroupID) return { ...transaction, AppliedDiscounts: [] };
+  const appliedDiscounts = await prisma.transactionDiscounts.findMany({
+    where: { BookingGroupID: transaction.BookingGroupID },
+    orderBy: { CreatedAt: "asc" },
+  });
+  return { ...transaction, AppliedDiscounts: appliedDiscounts };
+};
+
 const createFromBooking = async (bookingId) => {
   const booking = await prisma.bookingGroups.findUnique({
     where: { BookingGroupID: bookingId },
@@ -88,7 +97,7 @@ const createFromBooking = async (bookingId) => {
     if (existingTransaction.Status === "Paid") {
       throw new Error("Giao dịch này đã được thanh toán rồi");
     }
-    return existingTransaction;
+    return await withAppliedDiscounts(existingTransaction);
   }
 
   let subtotal = 0;
@@ -136,7 +145,7 @@ const createFromBooking = async (bookingId) => {
     return newTx;
   });
 
-  return transaction;
+  return await withAppliedDiscounts(transaction);
 };
 
 const payManual = async (transactionId, method, staffId) => {
@@ -285,6 +294,18 @@ const applyDiscount = async (transactionId, promotionId) => {
     throw new Error("Mã khuyến mãi đã hết hạn");
   }
 
+  if (promotion.UsageLimit) {
+    const usedCount = await prisma.transactionDiscounts.count({
+      where: {
+        PromotionID: promotionId,
+        NOT: { BookingGroupID: transaction.BookingGroupID },
+      },
+    });
+    if (usedCount >= promotion.UsageLimit) {
+      throw new Error("Mã khuyến mãi đã hết lượt sử dụng");
+    }
+  }
+
 
   if (promotion.BranchID && transaction.BookingGroups?.BranchID !== promotion.BranchID) {
     throw new Error("Mã khuyến mãi không áp dụng cho chi nhánh này");
@@ -298,6 +319,8 @@ const applyDiscount = async (transactionId, promotionId) => {
     promoDiscount = (baseAmount * parseFloat(promotion.DiscountValue)) / 100;
   } else if (promotion.DiscountType === "FIXED_AMOUNT") {
     promoDiscount = parseFloat(promotion.DiscountValue);
+  } else {
+    throw new Error("Loại khuyến mãi không hợp lệ");
   }
 
   if (promoDiscount < 0) {
@@ -385,6 +408,66 @@ const applyDiscount = async (transactionId, promotionId) => {
   return result;
 };
 
+const getDiscountOptions = async (transactionId, actor) => {
+  const transaction = await prisma.transactions.findUnique({
+    where: { TransactionID: transactionId },
+    include: { BookingGroups: true },
+  });
+
+  if (!transaction) throw new Error("Không tìm thấy hóa đơn");
+  if (
+    actor.role !== "Admin" &&
+    actor.branchId &&
+    transaction.BookingGroups?.BranchID !== actor.branchId
+  ) {
+    throw new Error("Bạn không có quyền xem ưu đãi của giao dịch này");
+  }
+
+  const now = new Date();
+  const [promotionRows, rewardRows] = await Promise.all([
+    prisma.promotions.findMany({
+      where: {
+        Status: "Active",
+        OR: [
+          { BranchID: null },
+          { BranchID: transaction.BookingGroups?.BranchID || -1 },
+        ],
+        AND: [
+          { OR: [{ StartDate: null }, { StartDate: { lte: now } }] },
+          { OR: [{ EndDate: null }, { EndDate: { gte: now } }] },
+        ],
+      },
+      include: { _count: { select: { TransactionDiscounts: true } } },
+      orderBy: { EndDate: "asc" },
+    }),
+    prisma.rewardRedemptions.findMany({
+      where: {
+        CustomerID: transaction.CustomerID,
+        Status: "UNUSED",
+        Rewards: { Status: "Active" },
+      },
+      include: { Rewards: true },
+      orderBy: { RedeemedAt: "desc" },
+    }),
+  ]);
+
+  const promotions = promotionRows.filter(
+    (promotion) =>
+      !promotion.UsageLimit ||
+      promotion._count.TransactionDiscounts < promotion.UsageLimit,
+  );
+  const rewards = rewardRows.filter((redemption) => {
+    if (!redemption.RedeemedAt) return true;
+    const expiresAt = new Date(redemption.RedeemedAt);
+    expiresAt.setDate(
+      expiresAt.getDate() + Number(redemption.Rewards?.ValidDays || 30),
+    );
+    return expiresAt >= now;
+  });
+
+  return { promotions, rewards };
+};
+
 const applyReward = async (transactionId, redemptionId) => {
   const transaction = await prisma.transactions.findUnique({
     where: { TransactionID: transactionId },
@@ -407,6 +490,19 @@ const applyReward = async (transactionId, redemptionId) => {
   }
   if (redemption.Status !== "UNUSED") {
     throw new Error("Phần quà này đã được sử dụng hoặc không hợp lệ");
+  }
+  if (redemption.Rewards.Status !== "Active") {
+    throw new Error("Phần quà đã ngưng áp dụng");
+  }
+
+  if (redemption.RedeemedAt) {
+    const expiresAt = new Date(redemption.RedeemedAt);
+    expiresAt.setDate(
+      expiresAt.getDate() + Number(redemption.Rewards.ValidDays || 30),
+    );
+    if (expiresAt.getTime() < Date.now()) {
+      throw new Error("Phần quà đã hết hạn sử dụng");
+    }
   }
 
   let rewardDiscount = parseFloat(redemption.Rewards.DiscountValue || 0);
@@ -570,6 +666,7 @@ export default {
   createVNPayUrl,
   vnpayIPN,
   applyDiscount,
+  getDiscountOptions,
   applyReward,
   removeDiscount,
 };

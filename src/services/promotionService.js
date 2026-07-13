@@ -17,14 +17,25 @@ const getAllPromotions = async (branchId, role) => {
 
 const getActivePromotions = async () => {
   const now = new Date();
-  return await prisma.promotions.findMany({
+  const promotions = await prisma.promotions.findMany({
     where: {
       Status: "Active",
-      StartDate: { lte: now },
-      EndDate: { gte: now }
+      AND: [
+        { OR: [{ StartDate: null }, { StartDate: { lte: now } }] },
+        { OR: [{ EndDate: null }, { EndDate: { gte: now } }] },
+      ],
+    },
+    include: {
+      _count: { select: { TransactionDiscounts: true } },
     },
     orderBy: { EndDate: 'asc' }
   });
+
+  return promotions.filter(
+    (promotion) =>
+      !promotion.UsageLimit ||
+      promotion._count.TransactionDiscounts < promotion.UsageLimit,
+  );
 };
 
 const getPromotionById = async (promotionId) => {

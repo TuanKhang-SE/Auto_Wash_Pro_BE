@@ -54,6 +54,13 @@ router.post(
   transactionController.createFromBooking,
 );
 
+router.get(
+  "/:id/discount-options",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager", "Staff"]),
+  transactionController.getDiscountOptions,
+);
+
 /**
  * @openapi
  * /api/transactions/{id}/pay-manual:
@@ -169,6 +176,7 @@ router.post(
 router.post(
   "/:id/apply-discount",
   authMiddleware,
+  roleMiddleware(["Admin", "Manager", "Staff"]),
   transactionController.applyDiscount,
 );
 
@@ -207,6 +215,7 @@ router.post(
 router.post(
   "/:id/apply-reward",
   authMiddleware,
+  roleMiddleware(["Admin", "Manager", "Staff"]),
   transactionController.applyReward,
 );
 
