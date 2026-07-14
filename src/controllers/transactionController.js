@@ -71,10 +71,16 @@ const createVNPayUrl = async (req, res) => {
   }
 };
 
-const vnpayReturn = (req, res) => {
+const vnpayReturn = async (req, res) => {
   const { vnp_ResponseCode } = req.query;
   if (vnp_ResponseCode === "00") {
-    res.send("<h1>Thanh toán thành công! Bạn có thể tắt tab này.</h1>");
+
+    try {
+      await transactionService.vnpayIPN(req.query);
+    } catch (error) {
+      console.log("Lỗi IPN nội bộ:", error);
+    }
+    res.send("<h1>Thanh toán thành công! Bạn có thể tắt tab này và tải lại trang.</h1>");
   } else {
     res.send(
       `<h1>Thanh toán thất bại hoặc đã bị hủy (Mã lỗi: ${vnp_ResponseCode})</h1>`,
