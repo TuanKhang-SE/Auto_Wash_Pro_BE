@@ -1,6 +1,20 @@
 import prisma from "../config/prisma.js";
 
-const getTodayBookings = async (branchId, customerName, status, bookingDate) => {
+const getTodayBookings = async (
+  branchId,
+  customerName,
+  status,
+  bookingDate
+) => {
+  const numericBranchId = Number(branchId);
+
+  if (
+    !Number.isInteger(numericBranchId) ||
+    numericBranchId <= 0
+  ) {
+    throw new Error("Chi nhánh không hợp lệ");
+  }
+
   const today = bookingDate
     ? new Date(`${bookingDate}T00:00:00`)
     : new Date();
@@ -15,10 +29,23 @@ const getTodayBookings = async (branchId, customerName, status, bookingDate) => 
   tomorrow.setDate(today.getDate() + 1);
 
   const whereClause = {
-    BranchID: branchId,
+    BranchID: numericBranchId,
+
     BookingDate: {
       gte: today,
       lt: tomorrow,
+    },
+
+    /*
+     * Không trả về những booking đã thanh toán thành công.
+     *
+     * Booking, Transaction và Invoice vẫn được giữ nguyên
+     * trong database để trang lịch sử tiếp tục sử dụng.
+     */
+    Transactions: {
+      none: {
+        Status: "Paid",
+      },
     },
   };
 
@@ -29,55 +56,96 @@ const getTodayBookings = async (branchId, customerName, status, bookingDate) => 
   if (customerName) {
     whereClause.Customers = {
       Users: {
-        FullName: { contains: customerName },
+        FullName: {
+          contains: customerName,
+        },
       },
     };
   }
 
-  const bookings = await prisma.bookingGroups.findMany({
-    where: whereClause,
-    include: {
-      Customers: {
-        include: {
-          Users: { select: { FullName: true, Phone: true } },
+  const bookings =
+    await prisma.bookingGroups.findMany({
+      where: whereClause,
+
+      include: {
+        Customers: {
+          include: {
+            Users: {
+              select: {
+                FullName: true,
+                Phone: true,
+              },
+            },
+          },
         },
-      },
-      BookingItems: {
-        include: {
-          Vehicles: { select: { LicensePlate: true, Brand: true, Model: true } },
-          ServiceLineItems: {
-            include: { Services: { select: { ServiceName: true } } },
+
+        BookingItems: {
+          include: {
+            Vehicles: {
+              select: {
+                LicensePlate: true,
+                Brand: true,
+                Model: true,
+              },
+            },
+
+            ServiceLineItems: {
+              include: {
+                Services: {
+                  select: {
+                    ServiceName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        /*
+         * Trả thêm thông tin giao dịch để Frontend
+         * vẫn có dữ liệu phục vụ luồng thanh toán.
+         */
+        Transactions: {
+          orderBy: {
+            TransactionID: "desc",
           },
         },
       },
-    },
-    orderBy: { StartTime: "asc" },
-  });
+
+      orderBy: {
+        StartTime: "asc",
+      },
+    });
 
   return bookings;
 };
 
-const updateBookingItemStatus = async (bookingItemId, status, staffId) => {
+const updateBookingItemStatus = async (
+  bookingItemId,
+  status,
+  staffId
+) => {
   const item = await prisma.bookingItems.findUnique({
     where: {
       BookingItemID: bookingItemId,
     },
+
     include: {
       BookingGroups: true,
     },
   });
 
   if (!item) {
-    throw new Error("Không tìm thấy xe trong đơn đặt lịch");
+    throw new Error(
+      "Không tìm thấy xe trong đơn đặt lịch"
+    );
   }
-
 
   const nextStatusMap = {
     Pending: "CheckedIn",
     CheckedIn: "InProgress",
     InProgress: "Completed",
   };
-
 
   if (item.Status === status) {
     return {
@@ -112,71 +180,77 @@ const updateBookingItemStatus = async (bookingItemId, status, staffId) => {
     updateData.ReadyForPaymentAt = currentTime;
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updatedItem = await tx.bookingItems.update({
-      where: {
-        BookingItemID: bookingItemId,
-      },
-      data: updateData,
-    });
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const updatedItem =
+        await tx.bookingItems.update({
+          where: {
+            BookingItemID: bookingItemId,
+          },
 
+          data: updateData,
+        });
 
-    const allItems = await tx.bookingItems.findMany({
-      where: {
-        BookingGroupID: item.BookingGroupID,
-      },
-    });
+      const allItems =
+        await tx.bookingItems.findMany({
+          where: {
+            BookingGroupID: item.BookingGroupID,
+          },
+        });
 
-
-    const activeItems = allItems.filter(
-      (bookingItem) => bookingItem.Status !== "Cancelled"
-    );
-
-    let groupStatus = "Pending";
-
-    if (activeItems.length === 0) {
-      groupStatus = "Cancelled";
-    } else {
-      const isAllCompleted = activeItems.every(
-        (bookingItem) => bookingItem.Status === "Completed"
-      );
-
-      const hasInProgress = activeItems.some(
+      const activeItems = allItems.filter(
         (bookingItem) =>
-          bookingItem.Status === "InProgress" ||
-          bookingItem.Status === "Completed"
+          bookingItem.Status !== "Cancelled"
       );
 
-      const hasCheckedIn = activeItems.some(
-        (bookingItem) => bookingItem.Status === "CheckedIn"
-      );
+      let groupStatus = "Pending";
 
-
-      if (isAllCompleted) {
-        groupStatus = "Completed";
-      } else if (hasInProgress) {
-        groupStatus = "InProgress";
-      } else if (hasCheckedIn) {
-        groupStatus = "CheckedIn";
+      if (activeItems.length === 0) {
+        groupStatus = "Cancelled";
       } else {
-        groupStatus = "Pending";
+        const isAllCompleted = activeItems.every(
+          (bookingItem) =>
+            bookingItem.Status === "Completed"
+        );
+
+        const hasInProgress = activeItems.some(
+          (bookingItem) =>
+            bookingItem.Status === "InProgress" ||
+            bookingItem.Status === "Completed"
+        );
+
+        const hasCheckedIn = activeItems.some(
+          (bookingItem) =>
+            bookingItem.Status === "CheckedIn"
+        );
+
+        if (isAllCompleted) {
+          groupStatus = "Completed";
+        } else if (hasInProgress) {
+          groupStatus = "InProgress";
+        } else if (hasCheckedIn) {
+          groupStatus = "CheckedIn";
+        } else {
+          groupStatus = "Pending";
+        }
       }
+
+      await tx.bookingGroups.update({
+        where: {
+          BookingGroupID: item.BookingGroupID,
+        },
+
+        data: {
+          Status: groupStatus,
+        },
+      });
+
+      return {
+        updatedItem,
+        groupStatus,
+      };
     }
-
-    await tx.bookingGroups.update({
-      where: {
-        BookingGroupID: item.BookingGroupID,
-      },
-      data: {
-        Status: groupStatus,
-      },
-    });
-
-    return {
-      updatedItem,
-      groupStatus,
-    };
-  });
+  );
 
   return {
     message: `Cập nhật trạng thái xe thành ${status} thành công`,
@@ -184,44 +258,89 @@ const updateBookingItemStatus = async (bookingItemId, status, staffId) => {
   };
 };
 
-const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
+const addServicesToItem = async (
+  bookingItemId,
+  branchId,
+  serviceIds
+) => {
   const item = await prisma.bookingItems.findUnique({
-    where: { BookingItemID: bookingItemId },
-    include: { BookingGroups: true, ServiceLineItems: true },
-  });
-
-  if (!item) throw new Error("Không tìm thấy xe này trong đơn đặt lịch");
-  if (item.BookingGroups.BranchID !== branchId)
-    throw new Error("Xe này không thuộc chi nhánh của bạn");
-  if (item.Status !== "CheckedIn")
-    throw new Error("Chỉ có thể thêm dịch vụ khi xe đang ở bước Check-in");
-
-  const branchServices = await prisma.branchServices.findMany({
     where: {
-      BranchID: branchId,
-      ServiceID: { in: serviceIds },
-      Status: "Active",
+      BookingItemID: bookingItemId,
     },
-    include: { Services: true },
+
+    include: {
+      BookingGroups: true,
+      ServiceLineItems: true,
+    },
   });
 
-  if (branchServices.length !== serviceIds.length) {
+  if (!item) {
     throw new Error(
-      "Một số dịch vụ không hợp lệ hoặc không hỗ trợ tại chi nhánh này",
+      "Không tìm thấy xe này trong đơn đặt lịch"
     );
   }
 
-  const existingServiceIds = item.ServiceLineItems.map((s) => s.ServiceID);
+  if (item.BookingGroups.BranchID !== branchId) {
+    throw new Error(
+      "Xe này không thuộc chi nhánh của bạn"
+    );
+  }
+
+  if (item.Status !== "CheckedIn") {
+    throw new Error(
+      "Chỉ có thể thêm dịch vụ khi xe đang ở bước Check-in"
+    );
+  }
+
+  const branchServices =
+    await prisma.branchServices.findMany({
+      where: {
+        BranchID: branchId,
+
+        ServiceID: {
+          in: serviceIds,
+        },
+
+        Status: "Active",
+      },
+
+      include: {
+        Services: true,
+      },
+    });
+
+  if (
+    branchServices.length !== serviceIds.length
+  ) {
+    throw new Error(
+      "Một số dịch vụ không hợp lệ hoặc không hỗ trợ tại chi nhánh này"
+    );
+  }
+
+  const existingServiceIds =
+    item.ServiceLineItems.map(
+      (serviceLineItem) =>
+        serviceLineItem.ServiceID
+    );
 
   await prisma.$transaction(async (tx) => {
-    for (const bs of branchServices) {
-      if (existingServiceIds.includes(bs.ServiceID)) continue;
+    for (const branchService of branchServices) {
+      if (
+        existingServiceIds.includes(
+          branchService.ServiceID
+        )
+      ) {
+        continue;
+      }
 
-      const price = bs.PriceOverride ?? bs.Services.BasePrice;
+      const price =
+        branchService.PriceOverride ??
+        branchService.Services.BasePrice;
+
       await tx.serviceLineItems.create({
         data: {
           BookingItemID: bookingItemId,
-          ServiceID: bs.ServiceID,
+          ServiceID: branchService.ServiceID,
           Quantity: 1,
           UnitPrice: price,
           LineTotal: price,
@@ -231,188 +350,297 @@ const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
     }
   });
 
-  return { message: "Thêm dịch vụ phát sinh thành công" };
+  return {
+    message: "Thêm dịch vụ phát sinh thành công",
+  };
 };
 
-const updateServicesToItem = async (bookingItemId, branchId, serviceIds) => {
+const updateServicesToItem = async (
+  bookingItemId,
+  branchId,
+  serviceIds
+) => {
   const item = await prisma.bookingItems.findUnique({
-    where: { BookingItemID: bookingItemId },
-    include: { BookingGroups: true, ServiceLineItems: true },
-  });
-
-  if (!item) throw new Error("Không tìm thấy xe này trong đơn đặt lịch");
-  if (item.BookingGroups.BranchID !== branchId)
-    throw new Error("Xe này không thuộc chi nhánh của bạn");
-  if (item.Status !== "CheckedIn")
-    throw new Error("Chỉ có thể sửa hoặc xóa dịch vụ khi xe đang ở bước Check-in");
-
-  if (serviceIds.length < 1) {
-    throw new Error("Mỗi xe phải có ít nhất một dịch vụ");
-  }
-
-  const branchServices = await prisma.branchServices.findMany({
     where: {
-      BranchID: branchId,
-      ServiceID: { in: serviceIds },
-      Status: "Active",
+      BookingItemID: bookingItemId,
     },
-    include: { Services: true },
+
+    include: {
+      BookingGroups: true,
+      ServiceLineItems: true,
+    },
   });
 
-  if (branchServices.length !== serviceIds.length) {
+  if (!item) {
     throw new Error(
-      "Một số dịch vụ không hợp lệ hoặc không hỗ trợ tại chi nhánh này",
+      "Không tìm thấy xe này trong đơn đặt lịch"
     );
   }
 
-  const existingServiceIds = item.ServiceLineItems.map((s) => s.ServiceID);
-  const servicesToRemove = existingServiceIds.filter(id => !serviceIds.includes(id));
-  const servicesToAdd = serviceIds.filter(id => !existingServiceIds.includes(id));
+  if (item.BookingGroups.BranchID !== branchId) {
+    throw new Error(
+      "Xe này không thuộc chi nhánh của bạn"
+    );
+  }
+
+  if (item.Status !== "CheckedIn") {
+    throw new Error(
+      "Chỉ có thể sửa hoặc xóa dịch vụ khi xe đang ở bước Check-in"
+    );
+  }
+
+  if (serviceIds.length < 1) {
+    throw new Error(
+      "Mỗi xe phải có ít nhất một dịch vụ"
+    );
+  }
+
+  const branchServices =
+    await prisma.branchServices.findMany({
+      where: {
+        BranchID: branchId,
+
+        ServiceID: {
+          in: serviceIds,
+        },
+
+        Status: "Active",
+      },
+
+      include: {
+        Services: true,
+      },
+    });
+
+  if (
+    branchServices.length !== serviceIds.length
+  ) {
+    throw new Error(
+      "Một số dịch vụ không hợp lệ hoặc không hỗ trợ tại chi nhánh này"
+    );
+  }
+
+  const existingServiceIds =
+    item.ServiceLineItems.map(
+      (serviceLineItem) =>
+        serviceLineItem.ServiceID
+    );
+
+  const servicesToRemove =
+    existingServiceIds.filter(
+      (serviceId) =>
+        !serviceIds.includes(serviceId)
+    );
+
+  const servicesToAdd = serviceIds.filter(
+    (serviceId) =>
+      !existingServiceIds.includes(serviceId)
+  );
 
   await prisma.$transaction(async (tx) => {
     if (servicesToRemove.length > 0) {
       await tx.serviceLineItems.deleteMany({
         where: {
           BookingItemID: bookingItemId,
-          ServiceID: { in: servicesToRemove }
-        }
+
+          ServiceID: {
+            in: servicesToRemove,
+          },
+        },
       });
     }
 
-    for (const bs of branchServices) {
-      if (servicesToAdd.includes(bs.ServiceID)) {
-        const price = bs.PriceOverride ?? bs.Services.BasePrice;
-        await tx.serviceLineItems.create({
-          data: {
-            BookingItemID: bookingItemId,
-            ServiceID: bs.ServiceID,
-            Quantity: 1,
-            UnitPrice: price,
-            LineTotal: price,
-            Note: "Sửa/Đổi tại quán",
-          },
-        });
+    for (const branchService of branchServices) {
+      if (
+        !servicesToAdd.includes(
+          branchService.ServiceID
+        )
+      ) {
+        continue;
       }
+
+      const price =
+        branchService.PriceOverride ??
+        branchService.Services.BasePrice;
+
+      await tx.serviceLineItems.create({
+        data: {
+          BookingItemID: bookingItemId,
+          ServiceID: branchService.ServiceID,
+          Quantity: 1,
+          UnitPrice: price,
+          LineTotal: price,
+          Note: "Sửa/Đổi tại quán",
+        },
+      });
     }
   });
 
-  return { message: "Cập nhật dịch vụ thành công" };
+  return {
+    message: "Cập nhật dịch vụ thành công",
+  };
 };
 
-const createWalkInBooking = async (branchId, phone, items) => {
-  return await prisma.$transaction(async (tx) => {
-    let customerId = null;
+const createWalkInBooking = async (
+  branchId,
+  phone,
+  items
+) => {
+  return await prisma.$transaction(
+    async (tx) => {
+      let customerId = null;
 
-
-    if (phone) {
-      const user = await tx.users.findUnique({
-        where: { Phone: phone }
-      });
-      if (user) {
-        const customer = await tx.customers.findFirst({
-          where: { UserID: user.UserID }
+      if (phone) {
+        const user = await tx.users.findUnique({
+          where: {
+            Phone: phone,
+          },
         });
-        if (customer) {
-          customerId = customer.CustomerID;
+
+        if (user) {
+          const customer =
+            await tx.customers.findFirst({
+              where: {
+                UserID: user.UserID,
+              },
+            });
+
+          if (customer) {
+            customerId = customer.CustomerID;
+          }
         }
       }
-    }
 
+      if (!customerId) {
+        for (const item of items) {
+          const vehicle =
+            await tx.vehicles.findFirst({
+              where: {
+                LicensePlate: item.LicensePlate,
+                Status: "Active",
+              },
+            });
 
-    if (!customerId) {
-      for (const item of items) {
-        const vehicle = await tx.vehicles.findFirst({
-          where: { LicensePlate: item.LicensePlate, Status: "Active" }
-        });
-        if (vehicle) {
-          customerId = vehicle.CustomerID;
-          break;
+          if (vehicle) {
+            customerId = vehicle.CustomerID;
+            break;
+          }
         }
       }
-    }
 
+      if (!customerId) {
+        const newCustomer =
+          await tx.customers.create({
+            data: {
+              UserID: null,
+              TotalVisits: 0,
+              TotalSpent: 0,
+            },
+          });
 
-    if (!customerId) {
-      const newCustomer = await tx.customers.create({
-        data: {
-          UserID: null,
-          TotalVisits: 0,
-          TotalSpent: 0,
-        }
-      });
-      customerId = newCustomer.CustomerID;
-    }
-
-
-    const newBooking = await tx.bookingGroups.create({
-      data: {
-        CustomerID: customerId,
-        BranchID: branchId,
-        BookingDate: new Date(),
-        StartTime: new Date(),
-        Status: "Pending",
-        Notes: "Khách vãng lai (Walk-in)"
+        customerId = newCustomer.CustomerID;
       }
-    });
 
-    for (const item of items) {
-
-      let vehicle = await tx.vehicles.findFirst({
-        where: { LicensePlate: item.LicensePlate, Status: "Active" }
-      });
-
-      if (!vehicle) {
-        vehicle = await tx.vehicles.create({
+      const newBooking =
+        await tx.bookingGroups.create({
           data: {
             CustomerID: customerId,
-            LicensePlate: item.LicensePlate,
-            VehicleType: item.VehicleType || "Sedan",
-            Brand: item.Brand || "Khác",
-            Model: item.Model || "Khác",
-            Status: "Active"
-          }
+            BranchID: branchId,
+            BookingDate: new Date(),
+            StartTime: new Date(),
+            Status: "Pending",
+            Notes: "Khách vãng lai (Walk-in)",
+          },
         });
-      }
 
+      for (const item of items) {
+        let vehicle =
+          await tx.vehicles.findFirst({
+            where: {
+              LicensePlate: item.LicensePlate,
+              Status: "Active",
+            },
+          });
 
-      const bookingItem = await tx.bookingItems.create({
-        data: {
-          BookingGroupID: newBooking.BookingGroupID,
-          VehicleID: vehicle.VehicleID,
-          Status: "Pending"
+        if (!vehicle) {
+          vehicle = await tx.vehicles.create({
+            data: {
+              CustomerID: customerId,
+              LicensePlate: item.LicensePlate,
+
+              VehicleType:
+                item.VehicleType || "Sedan",
+
+              Brand: item.Brand || "Khác",
+              Model: item.Model || "Khác",
+              Status: "Active",
+            },
+          });
         }
-      });
 
+        const bookingItem =
+          await tx.bookingItems.create({
+            data: {
+              BookingGroupID:
+                newBooking.BookingGroupID,
 
-      const branchServices = await tx.branchServices.findMany({
-        where: {
-          BranchID: branchId,
-          ServiceID: { in: item.Services },
-          Status: "Active"
-        },
-        include: { Services: true }
-      });
+              VehicleID: vehicle.VehicleID,
+              Status: "Pending",
+            },
+          });
 
-      if (branchServices.length !== item.Services.length) {
-        throw new Error(`Một số dịch vụ cho xe ${item.LicensePlate} không hợp lệ tại chi nhánh này`);
+        const branchServices =
+          await tx.branchServices.findMany({
+            where: {
+              BranchID: branchId,
+
+              ServiceID: {
+                in: item.Services,
+              },
+
+              Status: "Active",
+            },
+
+            include: {
+              Services: true,
+            },
+          });
+
+        if (
+          branchServices.length !==
+          item.Services.length
+        ) {
+          throw new Error(
+            `Một số dịch vụ cho xe ${item.LicensePlate} không hợp lệ tại chi nhánh này`
+          );
+        }
+
+        for (
+          const branchService of branchServices
+        ) {
+          const price =
+            branchService.PriceOverride ??
+            branchService.Services.BasePrice;
+
+          await tx.serviceLineItems.create({
+            data: {
+              BookingItemID:
+                bookingItem.BookingItemID,
+
+              ServiceID:
+                branchService.ServiceID,
+
+              Quantity: 1,
+              UnitPrice: price,
+              LineTotal: price,
+            },
+          });
+        }
       }
 
-      for (const bs of branchServices) {
-        const price = bs.PriceOverride ?? bs.Services.BasePrice;
-        await tx.serviceLineItems.create({
-          data: {
-            BookingItemID: bookingItem.BookingItemID,
-            ServiceID: bs.ServiceID,
-            Quantity: 1,
-            UnitPrice: price,
-            LineTotal: price
-          }
-        });
-      }
+      return newBooking;
     }
-
-    return newBooking;
-  });
+  );
 };
 
 export default {
