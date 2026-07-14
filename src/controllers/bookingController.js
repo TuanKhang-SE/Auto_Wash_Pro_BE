@@ -1,5 +1,7 @@
 import bookingService from "../services/bookingService.js";
 import prisma from "../config/prisma.js";
+import bookingOtpService from "../services/bookingOtpService.js";
+import smsService from "../services/smsService.js";
 
 const getAvailableSlots = async (req, res) => {
   try {
@@ -23,28 +25,66 @@ const createBooking = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const customer = await prisma.customers.findFirst({
+    const user = await prisma.users.findUnique({
       where: { UserID: userId },
+      select: {
+        Phone: true,
+        Customers: {
+          select: { CustomerID: true },
+        },
+      },
     });
+
+    const customer = user?.Customers?.[0];
+
     if (!customer) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            "Tài khoản chưa được thiết lập hồ sơ Khách hàng. Vui lòng thêm xe trước.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Tài khoản chưa có hồ sơ khách hàng",
+      });
     }
+
+    if (!user?.Phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Tài khoản chưa đăng ký số điện thoại",
+      });
+    }
+
+    const otpResult = bookingOtpService.verifyOtp(
+      userId,
+      user.Phone,
+      req.body.Otp,
+      false,
+    );
+
+    if (!otpResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: otpResult.message,
+      });
+    }
+
+    const { Otp, ...bookingData } = req.body;
 
     const booking = await bookingService.createBooking(
       customer.CustomerID,
-      req.body,
+      bookingData,
     );
-    res
-      .status(201)
-      .json({ success: true, message: "Đặt lịch thành công", data: booking });
+
+    // Chỉ xóa OTP sau khi booking tạo thành công.
+    bookingOtpService.clearOtp(userId, user.Phone);
+
+    res.status(201).json({
+      success: true,
+      message: "Đặt lịch thành công",
+      data: booking,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
@@ -117,9 +157,59 @@ const getMyBookings = async (req, res) => {
   }
 };
 
+const sendBookingOtp = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const user = await prisma.users.findUnique({
+      where: { UserID: userId },
+      select: { Phone: true },
+    });
+
+    if (!user?.Phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Tài khoản chưa đăng ký số điện thoại",
+      });
+    }
+
+    if (!/^0\d{9}$/.test(user.Phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Số điện thoại đăng ký không hợp lệ",
+      });
+    }
+
+    const otpData = bookingOtpService.createOtp(userId, user.Phone);
+    try {
+      await smsService.sendBookingOtp(user.Phone, otpData.code);
+    } catch (error) {
+      bookingOtpService.clearOtp(userId, user.Phone);
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      message: "Đã gửi OTP đến số điện thoại đăng ký",
+      data: {
+        expiresInSeconds: otpData.expiresInSeconds,
+        retryAfterSeconds: otpData.retryAfterSeconds,
+        ...(smsService.isMockMode() && { demoOtp: otpData.code }),
+      },
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+      retryAfterSeconds: error.retryAfterSeconds,
+    });
+  }
+};
+
 export default {
   getAvailableSlots,
   createBooking,
   cancelBooking,
   getMyBookings,
+  sendBookingOtp,
 };

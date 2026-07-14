@@ -7,22 +7,34 @@ import bookingController from "../controllers/bookingController.js";
 
 const router = express.Router();
 
+router.post(
+  "/send-otp",
+  authMiddleware,
+  roleMiddleware(["Customer"]),
+  bookingController.sendBookingOtp,
+);
+
 const createBookingSchema = z.object({
   BranchID: z.number().int().positive(),
   BookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Định dạng YYYY-MM-DD"),
   StartTime: z.string().regex(/^\d{2}:\d{2}$/, "Định dạng HH:mm"),
+
+  Otp: z.string().regex(
+    /^\d{6}$/,
+    "OTP phải gồm đúng 6 chữ số",
+  ),
+
   Items: z.array(
     z.object({
       VehicleID: z.number().int().positive(),
       Services: z.array(
         z.object({
-          ServiceID: z.number().int().positive()
-        })
-      ).min(1, "Phải chọn ít nhất 1 dịch vụ")
-    })
-  ).min(1, "Phải có ít nhất 1 xe trong đơn")
+          ServiceID: z.number().int().positive(),
+        }),
+      ).min(1, "Phải chọn ít nhất 1 dịch vụ"),
+    }),
+  ).min(1, "Phải có ít nhất 1 xe trong đơn"),
 });
-
 /**
  * @openapi
  * /api/bookings/available-slots:
