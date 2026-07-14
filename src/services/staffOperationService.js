@@ -59,54 +59,129 @@ const getTodayBookings = async (branchId, customerName, status, bookingDate) => 
 
 const updateBookingItemStatus = async (bookingItemId, status, staffId) => {
   const item = await prisma.bookingItems.findUnique({
-    where: { BookingItemID: bookingItemId },
-    include: { BookingGroups: true },
+    where: {
+      BookingItemID: bookingItemId,
+    },
+    include: {
+      BookingGroups: true,
+    },
   });
 
-  if (!item) throw new Error("Không tìm thấy Booking Item");
-
-  const updateData = { Status: status };
-
-  if (status === "CheckedIn") {
-    updateData.CheckInAt = new Date();
-  } else if (status === "InProgress") {
-    updateData.WashStartAt = new Date();
-  } else if (status === "Completed") {
-    updateData.CompletedAt = new Date();
+  if (!item) {
+    throw new Error("Không tìm thấy xe trong đơn đặt lịch");
   }
 
-  await prisma.$transaction(async (tx) => {
+
+  const nextStatusMap = {
+    Pending: "CheckedIn",
+    CheckedIn: "InProgress",
+    InProgress: "Completed",
+  };
+
+
+  if (item.Status === status) {
+    return {
+      message: `Xe đã ở trạng thái ${status}`,
+    };
+  }
+
+  const expectedStatus = nextStatusMap[item.Status];
+
+  if (expectedStatus !== status) {
+    throw new Error(
+      `Không thể chuyển trạng thái từ ${item.Status} sang ${status}`
+    );
+  }
+
+  const updateData = {
+    Status: status,
+  };
+
+  const currentTime = new Date();
+
+  if (status === "CheckedIn") {
+    updateData.CheckInAt = currentTime;
+  }
+
+  if (status === "InProgress") {
+    updateData.WashStartAt = currentTime;
+  }
+
+  if (status === "Completed") {
+    updateData.CompletedAt = currentTime;
+    updateData.ReadyForPaymentAt = currentTime;
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
     const updatedItem = await tx.bookingItems.update({
-      where: { BookingItemID: bookingItemId },
+      where: {
+        BookingItemID: bookingItemId,
+      },
       data: updateData,
     });
 
+
     const allItems = await tx.bookingItems.findMany({
-      where: { BookingGroupID: item.BookingGroupID },
+      where: {
+        BookingGroupID: item.BookingGroupID,
+      },
     });
 
-    const isAllCompleted = allItems.every((i) => i.Status === "Completed");
-    const isAnyInProgress = allItems.some(
-      (i) => i.Status === "InProgress" || i.Status === "CheckedIn",
+
+    const activeItems = allItems.filter(
+      (bookingItem) => bookingItem.Status !== "Cancelled"
     );
 
-    let groupStatus = item.BookingGroups.Status;
+    let groupStatus = "Pending";
 
-    if (isAllCompleted) {
-      groupStatus = "Completed";
-    } else if (isAnyInProgress && groupStatus === "Pending") {
-      groupStatus = "InProgress";
+    if (activeItems.length === 0) {
+      groupStatus = "Cancelled";
+    } else {
+      const isAllCompleted = activeItems.every(
+        (bookingItem) => bookingItem.Status === "Completed"
+      );
+
+      const hasInProgress = activeItems.some(
+        (bookingItem) =>
+          bookingItem.Status === "InProgress" ||
+          bookingItem.Status === "Completed"
+      );
+
+      const hasCheckedIn = activeItems.some(
+        (bookingItem) => bookingItem.Status === "CheckedIn"
+      );
+
+
+      if (isAllCompleted) {
+        groupStatus = "Completed";
+      } else if (hasInProgress) {
+        groupStatus = "InProgress";
+      } else if (hasCheckedIn) {
+        groupStatus = "CheckedIn";
+      } else {
+        groupStatus = "Pending";
+      }
     }
 
-    if (groupStatus !== item.BookingGroups.Status) {
-      await tx.bookingGroups.update({
-        where: { BookingGroupID: item.BookingGroupID },
-        data: { Status: groupStatus },
-      });
-    }
+    await tx.bookingGroups.update({
+      where: {
+        BookingGroupID: item.BookingGroupID,
+      },
+      data: {
+        Status: groupStatus,
+      },
+    });
+
+    return {
+      updatedItem,
+      groupStatus,
+    };
   });
 
-  return { message: `Cập nhật trạng thái xe thành ${status} thành công` };
+  return {
+    message: `Cập nhật trạng thái xe thành ${status} thành công`,
+    data: result,
+  };
 };
 
 const addServicesToItem = async (bookingItemId, branchId, serviceIds) => {
