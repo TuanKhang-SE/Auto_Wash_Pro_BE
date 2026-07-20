@@ -1,5 +1,128 @@
 import prisma from "../config/prisma.js";
 
+const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
+
+const getVietnamNowParts = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    minutes: Number(values.hour) * 60 + Number(values.minute),
+  };
+};
+
+const getTimeMinutes = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.getUTCHours() * 60 + date.getUTCMinutes();
+};
+
+const isMinuteInsideShift = (current, start, end) => {
+  if (start === null || end === null) return false;
+
+  if (start <= end) {
+    return current >= start && current <= end;
+  }
+
+  // Hỗ trợ ca qua đêm, ví dụ 22:00 - 06:00.
+  return current >= start || current <= end;
+};
+
+const assertStaffCanOperateNow = async (staffId, role = "Staff") => {
+  // Manager/Admin có thể xử lý ngoại lệ và không bị giới hạn theo ca.
+  if (role !== "Staff") return;
+
+  const numericStaffId = Number(staffId);
+  if (!Number.isInteger(numericStaffId) || numericStaffId <= 0) {
+    throw new Error("Nhân viên không hợp lệ");
+  }
+
+  const { date, minutes } = getVietnamNowParts();
+  const dayStart = new Date(`${date}T00:00:00.000Z`);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  const schedules = await prisma.staffSchedules.findMany({
+    where: {
+      UserID: numericStaffId,
+      Status: "Active",
+      WorkDate: {
+        gte: dayStart,
+        lt: dayEnd,
+      },
+    },
+    include: {
+      Shifts: true,
+    },
+  });
+
+  const activeSchedule = schedules.find((schedule) =>
+    isMinuteInsideShift(
+      minutes,
+      getTimeMinutes(schedule.Shifts?.StartTime),
+      getTimeMinutes(schedule.Shifts?.EndTime)
+    )
+  );
+
+  if (!activeSchedule) {
+    throw new Error(
+      schedules.length === 0
+        ? "Bạn chưa được xếp ca làm hôm nay"
+        : "Bạn chỉ được thao tác trong đúng khung giờ ca làm được phân công"
+    );
+  }
+};
+
+const assertBookingIsToday = (
+  bookingDate,
+  role = "Staff",
+  now = new Date()
+) => {
+  // Manager/Admin có thể xử lý ngoại lệ ở các ngày khác.
+  if (role !== "Staff") return;
+
+  if (!bookingDate) {
+    throw new Error("Không xác định được ngày của booking");
+  }
+
+  const booking = new Date(bookingDate);
+  if (Number.isNaN(booking.getTime())) {
+    throw new Error("Ngày booking không hợp lệ");
+  }
+
+  const bookingParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(booking);
+
+  const values = Object.fromEntries(
+    bookingParts.map((part) => [part.type, part.value])
+  );
+  const bookingDay = `${values.year}-${values.month}-${values.day}`;
+  const { date: today } = getVietnamNowParts(now);
+
+  if (bookingDay !== today) {
+    throw new Error("Staff chỉ được thao tác booking trong ngày hiện tại");
+  }
+};
+
 const getTodayBookings = async (
   branchId,
   customerName,
@@ -123,8 +246,11 @@ const getTodayBookings = async (
 const updateBookingItemStatus = async (
   bookingItemId,
   status,
-  staffId
+  staffId,
+  role = "Staff"
 ) => {
+  await assertStaffCanOperateNow(staffId, role);
+
   const item = await prisma.bookingItems.findUnique({
     where: {
       BookingItemID: bookingItemId,
@@ -140,6 +266,8 @@ const updateBookingItemStatus = async (
       "Không tìm thấy xe trong đơn đặt lịch"
     );
   }
+
+  assertBookingIsToday(item.BookingGroups?.BookingDate, role);
 
   const nextStatusMap = {
     Pending: "CheckedIn",
@@ -261,8 +389,12 @@ const updateBookingItemStatus = async (
 const addServicesToItem = async (
   bookingItemId,
   branchId,
-  serviceIds
+  serviceIds,
+  staffId,
+  role = "Staff"
 ) => {
+  await assertStaffCanOperateNow(staffId, role);
+
   const item = await prisma.bookingItems.findUnique({
     where: {
       BookingItemID: bookingItemId,
@@ -279,6 +411,8 @@ const addServicesToItem = async (
       "Không tìm thấy xe này trong đơn đặt lịch"
     );
   }
+
+  assertBookingIsToday(item.BookingGroups?.BookingDate, role);
 
   if (item.BookingGroups.BranchID !== branchId) {
     throw new Error(
@@ -358,8 +492,12 @@ const addServicesToItem = async (
 const updateServicesToItem = async (
   bookingItemId,
   branchId,
-  serviceIds
+  serviceIds,
+  staffId,
+  role = "Staff"
 ) => {
+  await assertStaffCanOperateNow(staffId, role);
+
   const item = await prisma.bookingItems.findUnique({
     where: {
       BookingItemID: bookingItemId,
@@ -376,6 +514,8 @@ const updateServicesToItem = async (
       "Không tìm thấy xe này trong đơn đặt lịch"
     );
   }
+
+  assertBookingIsToday(item.BookingGroups?.BookingDate, role);
 
   if (item.BookingGroups.BranchID !== branchId) {
     throw new Error(
@@ -649,4 +789,10 @@ export default {
   addServicesToItem,
   updateServicesToItem,
   createWalkInBooking,
+};
+
+export {
+  assertBookingIsToday,
+  getVietnamNowParts,
+  isMinuteInsideShift,
 };

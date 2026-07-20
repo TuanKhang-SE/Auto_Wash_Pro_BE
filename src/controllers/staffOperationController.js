@@ -34,6 +34,7 @@ const updateItemStatus = async (req, res) => {
       itemId,
       status,
       staffId,
+      req.user.role,
     );
     res.json({ success: true, message: result.message });
   } catch (error) {
@@ -45,6 +46,7 @@ const addServices = async (req, res) => {
   try {
     const itemId = parseInt(req.params.id);
     const branchId = req.user.branchId;
+    const staffId = req.user.userId;
     const { serviceIds } = req.body;
     if (
       !Array.isArray(serviceIds) ||
@@ -60,6 +62,8 @@ const addServices = async (req, res) => {
       itemId,
       branchId,
       serviceIds,
+      staffId,
+      req.user.role,
     );
     res.json({ success: true, message: result.message });
   } catch (error) {
@@ -71,6 +75,7 @@ const updateServices = async (req, res) => {
   try {
     const itemId = parseInt(req.params.id);
     const branchId = req.user.branchId;
+    const staffId = req.user.userId;
     const { serviceIds } = req.body;
     if (
       !Array.isArray(serviceIds) ||
@@ -86,6 +91,8 @@ const updateServices = async (req, res) => {
       itemId,
       branchId,
       serviceIds,
+      staffId,
+      req.user.role,
     );
     res.json({ success: true, message: result.message });
   } catch (error) {
