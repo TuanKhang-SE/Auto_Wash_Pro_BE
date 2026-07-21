@@ -106,7 +106,7 @@ router.get(
 router.post(
   "/",
   authMiddleware,
-  roleMiddleware(["Admin"]),
+  roleMiddleware(["Admin", "Manager"]),
   validate(createSchema),
   shiftController.createShift,
 );
@@ -151,7 +151,7 @@ router.post(
 router.put(
   "/:id",
   authMiddleware,
-  roleMiddleware(["Admin"]),
+  roleMiddleware(["Admin", "Manager"]),
   validate(updateSchema),
   shiftController.updateShift,
 );
@@ -177,7 +177,7 @@ router.put(
 router.delete(
   "/:id",
   authMiddleware,
-  roleMiddleware(["Admin"]),
+  roleMiddleware(["Admin", "Manager"]),
   shiftController.deleteShift,
 );
 
