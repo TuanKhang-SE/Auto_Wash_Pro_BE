@@ -89,7 +89,7 @@ const getDailyCashflow = async (branchId, role, startDate, endDate) => {
     const current = dailyMap.get(key) || { date: key, cash: 0, transfer: 0, other: 0, total: 0 };
     const amount = parseFloat(record.Amount || 0);
     if (record.Method === "CASH") current.cash += amount;
-    else if (record.Method === "BANK_TRANSFER") current.transfer += amount;
+    else if (record.Method === "BANK_TRANSFER" || record.Method === "VNPAY") current.transfer += amount;
     else current.other += amount;
     current.total += amount;
     dailyMap.set(key, current);
