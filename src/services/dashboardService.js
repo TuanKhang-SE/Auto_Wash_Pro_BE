@@ -105,10 +105,7 @@ const getDailyCashflow = async (branchId, role, startDate, endDate) => {
     dailyData,
     summary: {
       totalCash: breakdown.CASH || 0,
-      totalTransfer: breakdown.BANK_TRANSFER || 0,
-      totalOther: Object.entries(breakdown)
-        .filter(([method]) => !["CASH", "BANK_TRANSFER"].includes(method))
-        .reduce((sum, [, amount]) => sum + amount, 0),
+      totalTransfer: (breakdown.BANK_TRANSFER || 0) + (breakdown.VNPAY || 0),
       total: totalRevenue,
     },
   };
