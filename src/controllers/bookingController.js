@@ -135,6 +135,18 @@ const getMyBookings = async (req, res) => {
             FinalAmount: true,
             Status: true,
             CreatedAt: true,
+            PaymentRecords: {
+              select: {
+                PaymentID: true,
+                Method: true,
+                Status: true,
+                ConfirmedAt: true,
+              },
+              orderBy: {
+                ConfirmedAt: "desc",
+              },
+              take: 1,
+            },
           },
           orderBy: { CreatedAt: "desc" },
           take: 1,
