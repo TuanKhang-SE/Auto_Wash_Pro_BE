@@ -63,58 +63,144 @@ const getInvoicePreview = async (transactionId) => {
   return transaction;
 };
 
-const getIssuedInvoices = async (branchId, role) => {
-  const where = {
-    Status: "ISSUED",
-  };
+const parseDateFilter = (value, fieldName) => {
+  const date = new Date(`${value}T00:00:00`);
 
-  if (role === "Staff" || role === "Manager") {
-    if (!branchId) {
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${fieldName} không hợp lệ`);
+  }
+
+  return date;
+};
+
+const getIssuedInvoices = async (query = {}, actor = {}) => {
+  const page = Math.max(parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(
+    Math.max(parseInt(query.limit, 10) || 10, 1),
+    100,
+  );
+  const where = {};
+
+  if (query.status) {
+    where.Status =
+      query.status === "CANCELLED" ? "CANCELED" : query.status;
+  }
+
+  if (query.invoiceNo?.trim()) {
+    where.InvoiceNo = {
+      contains: query.invoiceNo.trim(),
+    };
+  }
+
+  if (query.startDate || query.endDate) {
+    where.IssuedAt = {};
+
+    if (query.startDate) {
+      where.IssuedAt.gte = parseDateFilter(query.startDate, "Từ ngày");
+    }
+
+    if (query.endDate) {
+      const endExclusive = parseDateFilter(query.endDate, "Đến ngày");
+      endExclusive.setDate(endExclusive.getDate() + 1);
+      where.IssuedAt.lt = endExclusive;
+    }
+  }
+
+  let scopedBranchId = null;
+
+  if (actor.role === "Staff" || actor.role === "Manager") {
+    if (!actor.branchId) {
       throw new Error("Tài khoản chưa được phân bổ về chi nhánh nào");
     }
 
+    scopedBranchId = Number(actor.branchId);
+  } else if (actor.role === "Admin" && query.branchId) {
+    scopedBranchId = Number(query.branchId);
+  }
+
+  if (
+    scopedBranchId !== null &&
+    (!Number.isInteger(scopedBranchId) || scopedBranchId <= 0)
+  ) {
+    throw new Error("Chi nhánh không hợp lệ");
+  }
+
+  if (scopedBranchId !== null) {
     where.Transactions = {
       BookingGroups: {
-        BranchID: branchId,
+        BranchID: scopedBranchId,
       },
     };
   }
 
-  return await prisma.invoices.findMany({
-    where,
-    include: {
-      Transactions: {
-        include: {
-          BookingGroups: {
-            include: {
-              branches: true,
-              BookingItems: {
-                include: {
-                  Vehicles: true,
-                  ServiceLineItems: {
-                    include: { Services: true },
+  const include = {
+    Transactions: {
+      include: {
+        BookingGroups: {
+          include: {
+            branches: true,
+            BookingItems: {
+              include: {
+                Vehicles: true,
+                ServiceLineItems: {
+                  include: {
+                    Services: true,
                   },
                 },
               },
-              Reviews: true,
             },
+            Reviews: true,
           },
-          Customers: {
-            include: {
-              Users: {
-                select: { FullName: true, Phone: true },
+        },
+        Customers: {
+          include: {
+            Users: {
+              select: {
+                FullName: true,
+                Phone: true,
               },
             },
           },
-          PaymentRecords: {
-            where: { Status: "Success" },
-            orderBy: { ConfirmedAt: "desc" },
+        },
+        PaymentRecords: {
+          where: {
+            Status: "Success",
+          },
+          orderBy: {
+            ConfirmedAt: "desc",
           },
         },
       },
     },
-    orderBy: [{ IssuedAt: "desc" }, { InvoiceID: "desc" }],
-  });
+  };
+
+  const [total, invoices] = await prisma.$transaction([
+    prisma.invoices.count({
+      where,
+    }),
+    prisma.invoices.findMany({
+      where,
+      include,
+      orderBy: [
+        {
+          IssuedAt: "desc",
+        },
+        {
+          InvoiceID: "desc",
+        },
+      ],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    data: invoices,
+  };
 };
 
 

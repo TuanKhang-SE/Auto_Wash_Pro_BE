@@ -2,11 +2,14 @@ import invoiceService from "../services/invoiceService.js";
 
 const getIssuedInvoices = async (req, res) => {
   try {
-    const invoices = await invoiceService.getIssuedInvoices(
-      req.user.branchId,
-      req.user.role,
+    const result = await invoiceService.getIssuedInvoices(
+      req.query,
+      {
+        branchId: req.user.branchId,
+        role: req.user.role,
+      },
     );
-    res.json({ success: true, data: invoices });
+    res.json({ success: true, ...result });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }

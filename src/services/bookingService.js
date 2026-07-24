@@ -335,7 +335,23 @@ const getAllBookings = async (query, user) => {
           },
         },
         Transactions: {
-          select: { Status: true, FinalAmount: true },
+          select: {
+            TransactionID: true,
+            Status: true,
+            FinalAmount: true,
+            CreatedAt: true,
+            PaymentRecords: {
+              select: {
+                Method: true,
+                Status: true,
+                ConfirmedAt: true,
+              },
+              orderBy: {
+                ConfirmedAt: "desc",
+              },
+              take: 1,
+            },
+          },
           orderBy: { CreatedAt: "desc" },
           take: 1,
         },
