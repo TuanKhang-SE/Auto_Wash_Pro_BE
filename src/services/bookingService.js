@@ -291,8 +291,73 @@ const cancelBooking = async (bookingId, customerId) => {
   return { message: "Hủy lịch thành công" };
 };
 
+const getAllBookings = async (query, user) => {
+  const { page = 1, limit = 10, status, startDate, endDate, branchId } = query;
+  const skip = (page - 1) * limit;
+
+  let whereClause = {};
+
+  if (user.role === "Manager") {
+    whereClause.BranchID = user.branchId;
+  } else if (user.role === "Admin" && branchId) {
+    whereClause.BranchID = parseInt(branchId);
+  }
+
+  if (status) {
+    whereClause.Status = status;
+  }
+
+  if (startDate || endDate) {
+    whereClause.BookingDate = {};
+    if (startDate) whereClause.BookingDate.gte = new Date(startDate);
+    if (endDate) whereClause.BookingDate.lte = new Date(endDate);
+  }
+
+  const [total, bookings] = await prisma.$transaction([
+    prisma.bookingGroups.count({ where: whereClause }),
+    prisma.bookingGroups.findMany({
+      where: whereClause,
+      include: {
+        Customers: {
+          include: {
+            Users: { select: { FullName: true, Phone: true, Email: true } },
+          },
+        },
+        branches: { select: { BranchName: true, Address: true } },
+        BookingItems: {
+          include: {
+            Vehicles: {
+              select: { LicensePlate: true, Brand: true, Model: true },
+            },
+            ServiceLineItems: {
+              include: { Services: { select: { ServiceName: true } } },
+            },
+          },
+        },
+        Transactions: {
+          select: { Status: true, FinalAmount: true },
+          orderBy: { CreatedAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { CreatedAt: "desc" },
+      skip: parseInt(skip),
+      take: parseInt(limit),
+    }),
+  ]);
+
+  return {
+    total,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalPages: Math.ceil(total / limit),
+    data: bookings,
+  };
+};
+
 export default {
   getAvailableSlots,
   createBooking,
   cancelBooking,
+  getAllBookings,
 };

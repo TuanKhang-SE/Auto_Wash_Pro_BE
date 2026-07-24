@@ -39,12 +39,12 @@ const isMinuteInsideShift = (current, start, end) => {
     return current >= start && current <= end;
   }
 
-  // Hỗ trợ ca qua đêm, ví dụ 22:00 - 06:00.
+
   return current >= start || current <= end;
 };
 
 const assertStaffCanOperateNow = async (staffId, role = "Staff") => {
-  // Manager/Admin có thể xử lý ngoại lệ và không bị giới hạn theo ca.
+
   if (role !== "Staff") return;
 
   const numericStaffId = Number(staffId);
@@ -93,7 +93,7 @@ const assertBookingIsToday = (
   role = "Staff",
   now = new Date()
 ) => {
-  // Manager/Admin có thể xử lý ngoại lệ ở các ngày khác.
+
   if (role !== "Staff") return;
 
   if (!bookingDate) {

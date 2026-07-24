@@ -5,10 +5,10 @@ const getAllPromotions = async (branchId, role) => {
   if (role === "Manager" && branchId) {
     whereClause.OR = [
       { BranchID: branchId },
-      { BranchID: null } // K/m toàn hệ thống
+      { BranchID: null }
     ];
   }
-  
+
   return await prisma.promotions.findMany({
     where: whereClause,
     orderBy: { StartDate: 'desc' }
@@ -51,7 +51,7 @@ const createPromotion = async (data) => {
     data: {
       PromotionName: data.PromotionName,
       BranchID: data.BranchID || null,
-      DiscountType: data.DiscountType, // PERCENTAGE or FIXED_AMOUNT
+      DiscountType: data.DiscountType,
       DiscountValue: data.DiscountValue,
       StartDate: data.StartDate ? new Date(data.StartDate) : new Date(),
       EndDate: data.EndDate ? new Date(data.EndDate) : null,

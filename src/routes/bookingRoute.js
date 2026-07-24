@@ -155,4 +155,52 @@ router.patch(
   bookingController.cancelBooking
 );
 
+/**
+ * @openapi
+ * /api/bookings:
+ *   get:
+ *     summary: Xem toàn bộ danh sách đặt lịch (Admin, Manager)
+ *     tags: ["Đặt lịch (Booking)"]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: branchId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
+router.get(
+  "/",
+  authMiddleware,
+  roleMiddleware(["Admin", "Manager"]),
+  bookingController.getAllBookings
+);
+
 export default router;

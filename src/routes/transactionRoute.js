@@ -246,6 +246,8 @@ router.delete(
 );
 
 router.get("/vnpay-return", transactionController.vnpayReturn);
+//Nhận Kết Quả Trực Tiếp
 router.get("/vnpay-ipn", transactionController.vnpayIPN);
+//Nhận Thông Báo Ngầm
 
 export default router;

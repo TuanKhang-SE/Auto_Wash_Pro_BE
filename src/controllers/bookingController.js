@@ -206,10 +206,25 @@ const sendBookingOtp = async (req, res) => {
   }
 };
 
+const getAllBookings = async (req, res) => {
+  try {
+    const user = {
+      userId: req.user.userId,
+      role: req.user.role,
+      branchId: req.user.branchId,
+    };
+    const result = await bookingService.getAllBookings(req.query, user);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export default {
   getAvailableSlots,
   createBooking,
   cancelBooking,
   getMyBookings,
   sendBookingOtp,
+  getAllBookings,
 };
