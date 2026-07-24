@@ -297,7 +297,7 @@ const getAllBookings = async (query, user) => {
 
   let whereClause = {};
 
-  if (user.role === "Manager") {
+  if (user.role === "Manager" || user.role === "Staff") {
     whereClause.BranchID = user.branchId;
   } else if (user.role === "Admin" && branchId) {
     whereClause.BranchID = parseInt(branchId);

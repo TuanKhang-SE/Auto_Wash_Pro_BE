@@ -199,7 +199,7 @@ router.patch(
 router.get(
   "/",
   authMiddleware,
-  roleMiddleware(["Admin", "Manager"]),
+  roleMiddleware(["Admin", "Manager", "Staff"]),
   bookingController.getAllBookings
 );
 
